@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { db } from '../../lib/db';
   import { reportError } from '../../lib/errors';
-  import { itemPer100, scaleItem, type AiItem, type AiMeal } from '../../lib/logic/ai';
+  import { itemPer100, scaleItem, waitingMessage, type AiItem, type AiMeal } from '../../lib/logic/ai';
   import { fmtG, fmtInt, parseNum } from '../../lib/logic/nutrition';
   import { tapFeedback } from '../../lib/platform';
   import { addEntry, getAiKey } from '../../lib/repo';
@@ -29,6 +29,7 @@
   // svelte-ignore state_referenced_locally
   let meal = $state<MealId>(request.meal);
   let busy = $state(false);
+  let seconds = $state(0);
   let error = $state('');
   let result = $state<AiMeal | null>(null);
   let rows = $state<Row[]>([]);
@@ -82,6 +83,9 @@
     if (!key || !canAnalyze) return;
     busy = true;
     error = '';
+    seconds = 0;
+    const started = Date.now();
+    const timer = setInterval(() => (seconds = Math.floor((Date.now() - started) / 1000)), 500);
     try {
       const meal = await analyzeMeal(key, description, image ? { base64: image.base64, mime: image.mime } : null);
       result = meal;
@@ -91,6 +95,7 @@
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
+      clearInterval(timer);
       busy = false;
     }
   }
@@ -159,7 +164,7 @@
     </div>
 
     <label class="field desc">
-      <span>Descrizione (più dettagli = stima migliore)</span>
+      <span>Descrizione: anche due parole rendono la stima più veloce e precisa</span>
       <textarea
         class="input"
         rows="3"
@@ -169,7 +174,7 @@
     </label>
 
     <button class="btn btn-ink btn-block analyze" disabled={!canAnalyze} onclick={analyze}>
-      {#if busy}<span class="spinner" aria-hidden="true"></span> Analizzo il piatto…{:else}<Icon name="sparkles" size={18} /> Analizza con l’AI{/if}
+      {#if busy}<span class="spinner" aria-hidden="true"></span> {waitingMessage(seconds, image !== null)} <span class="secs num">{seconds}s</span>{:else}<Icon name="sparkles" size={18} /> Analizza con l’AI{/if}
     </button>
     {#if error}<p class="error">{error}</p>{/if}
 
@@ -304,6 +309,10 @@
     to {
       transform: rotate(360deg);
     }
+  }
+  .secs {
+    opacity: 0.6;
+    font-weight: 400;
   }
   .error {
     margin: 10px 4px 0;

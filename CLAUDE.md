@@ -17,6 +17,7 @@
 - L'utente è principiante e usa solo il telefono: istruzioni passo passo, parole semplici, niente comandi da terminale per lui.
 - La chiave di firma non va mai nel repository: vive nei Secrets di GitHub (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`); il workflow legge da solo il nome (alias) della chiave. Non cambiarla mai.
 - Non cambiare `appId` (`com.nikcirri.nutrizione`) né il nome del database IndexedDB (`nutrizione`). Se cambi lo schema, aggiungi una nuova `version()` in `src/lib/db.ts` senza togliere le vecchie.
+- Dati di Health Connect sempre freschi (`src/lib/healthSync.ts`): rilettura ogni minuto ad app aperta sul Diario, al ritorno nell'app e con "trascina in giù" (Diario e Progressi, in `App.svelte`).
 - Health Connect: l'app chiede solo letture (passi, calorie attive e totali, distanza, allenamenti). I permessi in più dichiarati dal plugin si tolgono in `android/app/src/main/AndroidManifest.xml` con `tools:node="remove"`.
 - Aggiornamenti: controllo all'apertura e al ritorno nell'app (al massimo ogni 10 minuti, `src/lib/state/update.svelte.ts`); "Aggiorna" scarica l'APK con il plugin dell'app `AppUpdaterPlugin.java` (accetta solo URL delle Release di questo repo) e apre l'installazione di Android (permesso `REQUEST_INSTALL_PACKAGES`). Le prime 3 righe del changelog compaiono nell'avviso: scrivile brevi.
 - R8 (minify) è spento di proposito: i plugin di Health Connect e dello scanner usano la reflection.

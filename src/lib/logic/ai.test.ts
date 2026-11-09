@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { buildPrompt, extractJson, geminiProblem, geminiText, itemPer100, looksLikeGeminiKey, parseAiMeal, scaleItem } from './ai';
+import {
+  buildPrompt,
+  extractJson,
+  geminiProblem,
+  geminiText,
+  itemPer100,
+  looksLikeGeminiKey,
+  modelOrder,
+  parseAiMeal,
+  scaleItem,
+  waitingMessage,
+} from './ai';
 
 describe('AI: richiesta', () => {
   it('include la descrizione solo se c’è', () => {
@@ -55,5 +66,19 @@ describe('AI: risposta', () => {
     expect(looksLikeGeminiKey('AQ.Ab8RN6Jxl6OdplEKqxwlbG2IZ7PNmYabcdefghijkl')).toBe(true);
     expect(looksLikeGeminiKey('sk-123')).toBe(false);
     expect(looksLikeGeminiKey('projects/355147696887')).toBe(false);
+  });
+});
+
+describe('AI: velocità', () => {
+  it('prova per primo il modello che ha funzionato', () => {
+    const models = ['a', 'b', 'c'];
+    expect(modelOrder(models, 'c')).toEqual(['c', 'a', 'b']);
+    expect(modelOrder(models, '')).toEqual(['a', 'b', 'c']);
+    expect(modelOrder(models, 'vecchio')).toEqual(['a', 'b', 'c']);
+  });
+  it('messaggi durante l’attesa', () => {
+    expect(waitingMessage(1, true)).toBe('Invio la foto…');
+    expect(waitingMessage(5, false)).toBe('Leggo la descrizione…');
+    expect(waitingMessage(30, true)).toMatch(/più del solito/);
   });
 });

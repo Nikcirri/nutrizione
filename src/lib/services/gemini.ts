@@ -1,9 +1,11 @@
 // Analisi del piatto con Google Gemini (chiave personale dell'utente, presa da Google AI Studio).
 // Nell'app Android la richiesta parte dal telefono con CapacitorHttp.
 import { CapacitorHttp } from '@capacitor/core';
-import { buildPrompt, geminiProblem, geminiText, parseAiMeal, problemMessage, type AiMeal } from '../logic/ai';
+import { db } from '../db';
+import { buildPrompt, geminiProblem, geminiText, modelOrder, parseAiMeal, problemMessage, type AiMeal } from '../logic/ai';
 import { UserError } from '../errors';
 import { isNative } from '../platform';
+import { getAiModel, setAiModel } from '../repo';
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta';
 /** In ordine: si passa al successivo se il modello non c'è o ha finito il limite gratuito. */
@@ -69,9 +71,10 @@ function body(prompt: string, image: { base64: string; mime: string } | null, wi
 /** Stima ingredienti e valori del piatto. Lancia UserError con un messaggio comprensibile. */
 export async function analyzeMeal(key: string, description: string, image: { base64: string; mime: string } | null): Promise<AiMeal> {
   const prompt = buildPrompt(description, image !== null);
+  const models = modelOrder(MODELS, await getAiModel(db).catch(() => ''));
   let lastProblem: ReturnType<typeof geminiProblem> = 'other';
-  for (const [i, model] of MODELS.entries()) {
-    const isLast = i === MODELS.length - 1;
+  for (const [i, model] of models.entries()) {
+    const isLast = i === models.length - 1;
     const url = `${BASE}/models/${model}:generateContent`;
     let res = await request('POST', url, key, body(prompt, image, true));
     // Alcuni modelli non accettano l'impostazione del ragionamento: si riprova senza.
@@ -87,6 +90,7 @@ export async function analyzeMeal(key: string, description: string, image: { bas
         if (!isLast) continue;
         throw new UserError('Non ho capito la risposta di Gemini. Riprova, magari aggiungendo una descrizione.');
       }
+      void setAiModel(db, model).catch(() => undefined);
       return meal;
     }
     lastProblem = geminiProblem(res.status, res.data);

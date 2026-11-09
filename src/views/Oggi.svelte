@@ -331,6 +331,7 @@
           <span class="sub">
             {fmtInt(health.current?.steps ?? 0)} passi{health.current ? ` · aggiornato alle ${timeLabel(health.current.syncedAt)}` : ''}
           </span>
+          <span class="sub">Si aggiorna da solo ogni minuto; trascina in giù per farlo subito</span>
         </span>
         <span class="kcal num">{fmtInt(health.current?.activeKcal ?? 0)}<small> kcal</small></span>
       </div>

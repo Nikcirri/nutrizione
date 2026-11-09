@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { reportError } from './lib/errors';
-  import { syncHealthDay } from './lib/healthSync';
+  import { startLiveHealth, syncHealthDay } from './lib/healthSync';
   import { mealForHour } from './lib/logic/dates';
   import { onBackButton, onResume, tapFeedback } from './lib/platform';
   import { app, initApp, sheets, tickToday, type Tab } from './lib/state/app.svelte';
   import { announceNewVersion, installUpdate, refreshUpdate, resumeUpdate, update } from './lib/state/update.svelte';
-  import { closeTopOverlay } from './lib/state/ui.svelte';
+  import { closeTopOverlay, showToast } from './lib/state/ui.svelte';
   import BusyOverlay from './lib/ui/BusyOverlay.svelte';
   import DialogHost from './lib/ui/DialogHost.svelte';
   import Icon, { type IconName } from './lib/ui/Icon.svelte';
@@ -33,6 +33,53 @@
   ];
 
   let main = $state<HTMLElement | null>(null);
+
+  // ---------- Trascina in giù per aggiornare (Diario e Progressi) ----------
+  const PULL_TRIGGER = 64;
+  let pull = $state(0);
+  let refreshing = $state(false);
+  let pullStart: number | null = null;
+  const canPull = $derived(app.tab === 'oggi' || app.tab === 'progressi');
+
+  function onTouchStart(e: TouchEvent) {
+    pullStart = canPull && !refreshing && main && main.scrollTop <= 0 ? (e.touches[0]?.clientY ?? null) : null;
+  }
+
+  function onTouchMove(e: TouchEvent) {
+    if (pullStart === null || !main) return;
+    const dy = (e.touches[0]?.clientY ?? pullStart) - pullStart;
+    pull = dy > 0 && main.scrollTop <= 0 ? Math.min(110, dy * 0.5) : 0;
+  }
+
+  async function onTouchEnd() {
+    if (pullStart === null) return;
+    pullStart = null;
+    if (pull < PULL_TRIGGER) {
+      pull = 0;
+      return;
+    }
+    refreshing = true;
+    pull = 56;
+    void tapFeedback();
+    try {
+      await refreshData();
+    } finally {
+      refreshing = false;
+      pull = 0;
+    }
+  }
+
+  /** Rilegge i dati dell'orologio e controlla gli aggiornamenti. */
+  async function refreshData() {
+    tickToday();
+    const health = app.settings.prefs.healthConnected;
+    const results = await Promise.allSettled([
+      health ? syncHealthDay(app.date, true).then(() => void app.healthTick++) : Promise.resolve(),
+      refreshUpdate(),
+    ]);
+    const failed = results[0]?.status === 'rejected';
+    showToast(failed ? 'Non riesco a leggere i dati da Health Connect.' : health ? 'Dati dell’orologio aggiornati' : 'Diario aggiornato');
+  }
 
   function selectTab(tab: Tab) {
     if (app.tab === tab) {
@@ -77,13 +124,17 @@
       void resumeUpdate();
       if (app.settings.onboarded) void refreshUpdate();
       if (app.settings.prefs.healthConnected) {
-        syncHealthDay(app.date)
+        syncHealthDay(app.date, true)
           .then(() => app.healthTick++)
           .catch(() => undefined);
       }
     });
+    const stopLive = startLiveHealth();
     const timer = setInterval(tickToday, 30_000);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      stopLive();
+    };
   });
 </script>
 
@@ -93,7 +144,12 @@
   <Onboarding />
 {:else}
   <div class="shell">
-    <main bind:this={main}>
+    {#if pull > 0}
+      <div class="ptr" style:transform="translate(-50%, {pull - 44}px)" style:opacity={Math.min(1, pull / PULL_TRIGGER)} aria-hidden="true">
+        <span class:spin={refreshing} style:transform={refreshing ? undefined : `rotate(${pull * 4}deg)`}><Icon name="refresh" size={20} /></span>
+      </div>
+    {/if}
+    <main bind:this={main} ontouchstart={onTouchStart} ontouchmove={onTouchMove} ontouchend={onTouchEnd} ontouchcancel={onTouchEnd}>
       {#if update.available && (!update.dismissed || update.phase !== 'idle')}
         <div class="update card" role="status">
           {#if update.phase === 'download'}
@@ -171,6 +227,32 @@
   .splash {
     height: 100%;
     background: var(--bg);
+  }
+  .ptr {
+    position: fixed;
+    left: 50%;
+    top: calc(var(--safe-top) + 8px);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.15);
+    color: var(--accent-text);
+    display: grid;
+    place-items: center;
+    z-index: 30;
+    pointer-events: none;
+  }
+  .ptr span {
+    display: grid;
+  }
+  .spin {
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   .shell {
     height: 100%;

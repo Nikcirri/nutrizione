@@ -32,6 +32,16 @@ export async function setAiKey(db: NutriDB, key: string): Promise<void> {
   else await db.kv.delete('geminiKey');
 }
 
+/** Ultimo modello di Gemini che ha funzionato: la volta dopo si prova per primo (risposta più veloce). */
+export async function getAiModel(db: NutriDB): Promise<string> {
+  const row = await db.kv.get('aiModel');
+  return typeof row?.value === 'string' ? row.value : '';
+}
+
+export async function setAiModel(db: NutriDB, model: string): Promise<void> {
+  await db.kv.put({ key: 'aiModel', value: model });
+}
+
 // ---------- Alimenti ----------
 
 /** Salva l'alimento usato (se è nuovo) e aggiorna "usato di recente". */

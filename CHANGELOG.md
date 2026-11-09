@@ -1,5 +1,11 @@
 # Novità
 
+## [0.4.0] - 2026-11-09
+
+- Dati dell'orologio sempre aggiornati: ad app aperta si rileggono ogni minuto e ogni volta che torni nell'app.
+- Trascina in giù il Diario per aggiornare subito calorie, passi e allenamenti.
+- Foto AI più veloce: foto più leggera, usa per primo il modello che ha funzionato e mostra a che punto è.
+
 ## [0.3.0] - 2026-11-09
 
 - Aggiornamenti dentro l'app: quando esce una versione nuova compare l'avviso anche ad app aperta, e con "Aggiorna" si scarica e si installa senza passare dal browser.

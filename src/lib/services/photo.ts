@@ -1,8 +1,9 @@
-// Foto del piatto: fotocamera o galleria, poi rimpicciolita (max 1024 px) per mandarla velocemente all'AI.
+// Foto del piatto: fotocamera o galleria, poi rimpicciolita (max 768 px) per mandarla velocemente all'AI.
 import { Camera, CameraDirection, MediaTypeSelection } from '@capacitor/camera';
 import { isNative } from '../platform';
 
-const MAX_SIDE = 1024;
+/** Per riconoscere il cibo basta: una foto più piccola parte e viene analizzata prima. */
+const MAX_SIDE = 768;
 
 function isCancel(e: unknown): boolean {
   const text = `${(e as { code?: string })?.code ?? ''} ${(e as Error)?.message ?? e}`;
@@ -92,7 +93,7 @@ export async function prepareImage(blob: Blob): Promise<PreparedImage> {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas non disponibile');
     ctx.drawImage(bitmap, 0, 0, w, h);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
     return { dataUrl, mime: 'image/jpeg', base64: dataUrl.slice(dataUrl.indexOf(',') + 1) };
   } finally {
     bitmap.close();

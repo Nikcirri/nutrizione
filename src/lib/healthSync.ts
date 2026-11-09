@@ -6,10 +6,13 @@ import { healthFor, saveHealth } from './repo';
 import { connectHealth, healthAuthorized, healthAvailability, readHealthDay } from './services/health';
 import { app, updateSettings } from './state/app.svelte';
 
-const MIN_INTERVAL_MS = 2 * 60_000;
+/** Due letture dello stesso giorno a meno di 30 secondi l'una dall'altra non servono. */
+const MIN_INTERVAL_MS = 30_000;
+/** Ad app aperta sul Diario, i dati dell'orologio si rileggono ogni minuto. */
+const LIVE_INTERVAL_MS = 60_000;
 const running = new Map<string, Promise<void>>();
 
-/** Aggiorna i dati del giorno (al massimo ogni 2 minuti, a meno di `force`). */
+/** Aggiorna i dati del giorno (al massimo ogni 30 secondi, a meno di `force`). */
 export function syncHealthDay(date: string, force = false): Promise<void> {
   if (!isNative() || !app.settings.prefs.healthConnected) return Promise.resolve();
   const existing = running.get(date);
@@ -42,4 +45,26 @@ export async function disconnectHealth(): Promise<void> {
   await updateSettings((s) => {
     s.prefs.healthConnected = false;
   });
+}
+
+/**
+ * Aggiornamento continuo ad app aperta: ogni minuto (solo se l'app è in primo piano e mostra il Diario)
+ * e ogni volta che si torna nell'app. Restituisce la funzione per fermarlo.
+ */
+export function startLiveHealth(): () => void {
+  const tick = () => {
+    if (document.visibilityState !== 'visible' || app.tab !== 'oggi' || !app.settings.prefs.healthConnected) return;
+    syncHealthDay(app.date)
+      .then(() => app.healthTick++)
+      .catch(() => undefined);
+  };
+  const timer = setInterval(tick, LIVE_INTERVAL_MS);
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') tick();
+  };
+  document.addEventListener('visibilitychange', onVisible);
+  return () => {
+    clearInterval(timer);
+    document.removeEventListener('visibilitychange', onVisible);
+  };
 }

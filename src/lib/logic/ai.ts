@@ -119,6 +119,19 @@ export function itemPer100(item: AiItem): Nutrients {
   };
 }
 
+/** Ordine dei modelli da provare: quello che ha funzionato l'ultima volta va per primo. */
+export function modelOrder(models: readonly string[], lastGood: string): string[] {
+  return models.includes(lastGood) ? [lastGood, ...models.filter((m) => m !== lastGood)] : [...models];
+}
+
+/** Messaggio durante l'attesa, in base ai secondi passati. */
+export function waitingMessage(seconds: number, hasPhoto: boolean): string {
+  if (seconds < 3) return hasPhoto ? 'Invio la foto…' : 'Invio la descrizione…';
+  if (seconds < 8) return hasPhoto ? 'Riconosco il cibo…' : 'Leggo la descrizione…';
+  if (seconds < 20) return 'Calcolo grammi e valori…';
+  return 'Ci vuole più del solito, ancora un momento…';
+}
+
 // ---------- Risposta dell'API di Gemini ----------
 
 /** Testo della risposta (senza le parti di "ragionamento"). */
