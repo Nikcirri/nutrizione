@@ -3,7 +3,7 @@ import { db } from '../db';
 import { todayKey } from '../logic/dates';
 import { dailyTargets, type DailyTargets } from '../logic/goals';
 import { defaultSettings } from '../logic/settings';
-import { latestWeight, loadSettings, saveSettings } from '../repo';
+import { getAiKey, latestWeight, loadSettings, saveSettings } from '../repo';
 import type { DiaryEntry, Food, MealId, Settings } from '../types';
 
 export type Tab = 'oggi' | 'digiuno' | 'progressi' | 'profilo';
@@ -19,12 +19,25 @@ export const app = $state({
   currentWeight: null as number | null,
   /** Aumenta quando arrivano dati nuovi da Health Connect (per ricaricare le schede). */
   healthTick: 0,
+  /** C'è la chiave di Gemini (il + in modalità semplice apre la Foto AI). */
+  aiReady: false,
+  /** Mostrare la scheda che presenta la modalità semplice (una volta sola). */
+  simpleIntro: false,
 });
 
 export async function initApp(): Promise<void> {
   app.settings = await loadSettings(db);
   await refreshWeight();
+  const [key, intro] = await Promise.all([getAiKey(db).catch(() => ''), db.kv.get('simpleIntroSeen').catch(() => undefined)]);
+  app.aiReady = !!key;
+  app.simpleIntro = app.settings.onboarded && !app.settings.prefs.simpleMode && !intro;
   app.ready = true;
+}
+
+/** La scheda della modalità semplice non si mostra più. */
+export async function dismissSimpleIntro(): Promise<void> {
+  app.simpleIntro = false;
+  await db.kv.put({ key: 'simpleIntroSeen', value: true });
 }
 
 export async function refreshWeight(): Promise<void> {
@@ -76,7 +89,7 @@ export interface CreateFoodRequest {
 
 export const sheets = $state({
   addFood: null as { date: string; meal: MealId } | null,
-  aiMeal: null as { date: string; meal: MealId } | null,
+  aiMeal: null as { date: string; meal: MealId; autoCamera?: boolean } | null,
   detail: null as DetailRequest | null,
   createFood: null as CreateFoodRequest | null,
   quickAdd: null as { date: string; meal: MealId; entry?: DiaryEntry } | null,

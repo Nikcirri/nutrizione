@@ -18,6 +18,11 @@ import {
   saveSettings,
   setWeight,
   startFast,
+  saveDish,
+  findDish,
+  topDishes,
+  addHabit,
+  getHabits,
 } from './repo';
 import type { DiaryEntry } from './types';
 
@@ -93,5 +98,22 @@ describe('database', () => {
     expect(await entriesFor(other, '2026-01-01')).toHaveLength(0);
     expect(await entriesFor(other, '2026-11-09')).toHaveLength(1);
     expect((await loadSettings(other)).profile.heightCm).toBe(180);
+  });
+});
+
+describe('piatti salvati e abitudini', () => {
+  it('salva e aggiorna un piatto con lo stesso nome', async () => {
+    const items = [{ name: 'Pasta', grams: 200, kcal: 300, carbs: 60, protein: 10, fat: 1, fiber: 2 }];
+    await saveDish(db, 'Pasta al pomodoro', items, '2026-11-09T12:00:00Z');
+    await saveDish(db, 'pasta al pomodòro', [{ ...items[0]!, grams: 150, kcal: 225 }], '2026-11-10T12:00:00Z');
+    const d = await findDish(db, 'PASTA AL POMODORO');
+    expect(d?.useCount).toBe(2);
+    expect(d?.kcal).toBe(225);
+    expect(await topDishes(db)).toHaveLength(1);
+  });
+  it('conta le correzioni', async () => {
+    await addHabit(db, 'lessDressing');
+    await addHabit(db, 'lessDressing');
+    expect((await getHabits(db)).lessDressing).toBe(2);
   });
 });

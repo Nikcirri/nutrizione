@@ -5,6 +5,8 @@
   import { addDays, dayChip, dayLabel, greeting, longDate, monthYear, timeLabel, weekDays } from '../lib/logic/dates';
   import { dayBudget } from '../lib/logic/goals';
   import { amountLabel, entryNutrients, fmtInt, fmtLiters, sumEntries } from '../lib/logic/nutrition';
+  import { mealForHour } from '../lib/logic/dates';
+  import { EXPLAIN, dayHints, dayVerdict, mealVerdict, nextMeal, nextMealAdvice, type Topic } from '../lib/logic/simple';
   import { isNative, tapFeedback } from '../lib/platform';
   import {
     activitiesFor,
@@ -17,9 +19,9 @@
     healthFor,
     previousDayWithMeal,
   } from '../lib/repo';
-  import { app, currentTargets, sheets } from '../lib/state/app.svelte';
+  import { app, currentTargets, dismissSimpleIntro, sheets, updateSettings } from '../lib/state/app.svelte';
   import { useLive } from '../lib/state/live.svelte';
-  import { showToast, showUndoToast } from '../lib/state/ui.svelte';
+  import { infoDialog, showToast, showUndoToast } from '../lib/state/ui.svelte';
   import { MEALS, type DiaryEntry, type MealId } from '../lib/types';
   import Icon, { type IconName } from '../lib/ui/Icon.svelte';
   import Ring from '../lib/ui/Ring.svelte';
@@ -55,11 +57,52 @@
   let dateInput = $state<HTMLInputElement | null>(null);
 
   const macros = $derived([
-    { label: 'Carboidrati', value: eaten.carbs, target: targets.carbs, color: 'var(--carbs)' },
-    { label: 'Proteine', value: eaten.protein, target: targets.protein, color: 'var(--protein)' },
-    { label: 'Grassi', value: eaten.fat, target: targets.fat, color: 'var(--fat)' },
-    { label: 'Fibre', value: eaten.fiber ?? 0, target: targets.fiber, color: 'var(--fiber)' },
+    { label: 'Carboidrati', topic: 'carboidrati' as Topic, value: eaten.carbs, target: targets.carbs, color: 'var(--carbs)' },
+    { label: 'Proteine', topic: 'proteine' as Topic, value: eaten.protein, target: targets.protein, color: 'var(--protein)' },
+    { label: 'Grassi', topic: 'grassi' as Topic, value: eaten.fat, target: targets.fat, color: 'var(--fat)' },
+    { label: 'Fibre', topic: 'fibre' as Topic, value: eaten.fiber ?? 0, target: targets.fiber, color: 'var(--fiber)' },
   ]);
+
+  // ---------- Modalità semplice ----------
+  const simple = $derived(app.settings.prefs.simpleMode);
+  const verdict = $derived(dayVerdict(eaten.kcal, budget));
+  const hints = $derived(
+    dayHints({
+      eaten,
+      budget,
+      proteinTarget: targets.protein,
+      fiberTarget: targets.fiber,
+      waterMl: water.current,
+      waterTarget: targets.waterMl,
+      hour,
+      isToday,
+    }),
+  );
+  const filledMeals = $derived(new Set(entries.current.map((e) => e.meal)));
+  const advice = $derived.by(() => {
+    if (!isToday) return null;
+    const m = nextMeal(mealForHour(hour), filledMeals);
+    if (!m) return null;
+    const share = MEALS.find((x) => x.id === m)?.share ?? 0.3;
+    const needProtein = hints.some((h) => h.includes('proteine'));
+    const needVeg = hints.some((h) => h.includes('verdure'));
+    return nextMealAdvice(m, remaining, budget * share, needProtein, needVeg);
+  });
+  const lightEmoji = (l: string) => (l === 'green' ? '🟢' : l === 'yellow' ? '🟡' : '🔴');
+
+  function explain(topic: Topic) {
+    void infoDialog(EXPLAIN[topic].title, EXPLAIN[topic].text);
+  }
+
+  async function trySimple(on: boolean) {
+    await dismissSimpleIntro();
+    if (on) {
+      await updateSettings((s) => {
+        s.prefs.simpleMode = true;
+      });
+      showToast('Modalità semplice attiva: la cambi quando vuoi dal Profilo');
+    }
+  }
 
   const MEAL_ICONS: Record<MealId, IconName> = { colazione: 'sun', pranzo: 'meal', cena: 'moon', spuntini: 'apple' };
 
@@ -204,6 +247,17 @@
   </div>
 </section>
 
+{#if app.simpleIntro}
+  <section class="card intro">
+    <strong>Novità: modalità semplice</strong>
+    <p>Per chi non conosce i valori: porzioni a occhio, colori e consigli in parole al posto di grammi e numeri. E il + apre subito la fotocamera.</p>
+    <div class="intro-actions">
+      <button class="btn btn-ghost btn-small" onclick={() => trySimple(false)}>No, grazie</button>
+      <button class="btn btn-primary btn-small" onclick={() => trySimple(true)}>Provala</button>
+    </div>
+  </section>
+{/if}
+
 <section class="summary">
   <Ring value={budget > 0 ? eaten.kcal / budget : 0} size={150} stroke={13} color="var(--ring-on-lime)" overColor="var(--over)" track="var(--ring-track-on-lime)">
     <span class="num remaining" class:over={remaining < 0}>{fmtInt(Math.abs(remaining))}</span>
@@ -222,21 +276,44 @@
       <span><i class="dot" style:background="var(--burn)"></i>Bruciate</span>
       <strong class="num">{fmtInt(burned)} <small>kcal</small></strong>
     </div>
+    {#if simple}
+      <button class="what" onclick={() => explain('calorie')}><Icon name="info" size={14} /> Cosa sono le calorie?</button>
+    {/if}
   </div>
 </section>
 
+{#if simple}
+  <section class="card advice">
+    <p class="verdict">{lightEmoji(verdict.light)} {verdict.text}</p>
+    {#each hints as h (h)}
+      <p class="hint-line">💡 {h}</p>
+    {/each}
+    {#if advice && advice.ideas.length}
+      <div class="next">
+        <span class="next-title">Idee per {MEALS.find((m) => m.id === advice.meal)?.label.toLowerCase()}</span>
+        <p class="next-text">{advice.text}</p>
+        <ul>
+          {#each advice.ideas as idea (idea.id)}<li>{idea.name}</li>{/each}
+        </ul>
+      </div>
+    {:else if advice}
+      <p class="hint-line">{advice.text}</p>
+    {/if}
+  </section>
+{:else}
 <div class="macro-grid">
   {#each macros as m (m.label)}
-    <div class="card macro">
+    <button class="card macro" onclick={() => explain(m.topic)} aria-label="{m.label}: cosa sono">
       <span class="m-label">{m.label}</span>
       <div class="m-value">
         <strong class="num" class:over={m.target > 0 && m.value > m.target * 1.05}>{pct(m.value, m.target)}%</strong>
         <span class="num">{fmtInt(m.value)} di {fmtInt(m.target)} g</span>
       </div>
       <div class="bar"><div style:width="{Math.min(100, pct(m.value, m.target))}%" style:background={m.color}></div></div>
-    </div>
+    </button>
   {/each}
 </div>
+{/if}
 
 <div class="mini-grid">
   <div class="card mini">
@@ -287,7 +364,12 @@
       <span class="meal-icon"><Icon name={MEAL_ICONS[meal.id]} size={22} /></span>
       <div class="grow">
         <h2>{meal.label}</h2>
-        <span class="num"><Icon name="flame" size={14} /> {fmtInt(total.kcal)} / {fmtInt(targets.kcal * meal.share)} kcal</span>
+        {#if simple}
+          {@const mv = mealVerdict(total.kcal, budget * meal.share)}
+          <span class="num"><Icon name="flame" size={14} /> {fmtInt(total.kcal)} kcal{mv ? ` · ${lightEmoji(mv.light)} ${mv.text}` : ''}</span>
+        {:else}
+          <span class="num"><Icon name="flame" size={14} /> {fmtInt(total.kcal)} / {fmtInt(targets.kcal * meal.share)} kcal</span>
+        {/if}
       </div>
       <button class="plus" aria-label="Aggiungi a {meal.label}" onclick={() => (sheets.addFood = { date: app.date, meal: meal.id })}>
         <Icon name="plus" />
@@ -299,7 +381,13 @@
           <button class="item" onclick={() => openEntry(e)}>
             <span class="grow">
               <span class="title">{e.name}</span>
-              <span class="sub">{[e.brand, amountLabel(e)].filter(Boolean).join(' · ') || 'Calorie veloci'}</span>
+              <span class="sub">
+                {#if simple}
+                  {[e.brand, e.portionLabel ? amountLabel(e) : e.ai ? 'stimato con la foto' : ''].filter(Boolean).join(' · ') || (e.quick ? 'Calorie veloci' : 'porzione scelta')}
+                {:else}
+                  {[e.brand, amountLabel(e)].filter(Boolean).join(' · ') || 'Calorie veloci'}
+                {/if}
+              </span>
             </span>
             <span class="kcal num">{fmtInt(entryNutrients(e).kcal)}<small> kcal</small></span>
           </button>
@@ -568,6 +656,72 @@
   }
   .macro {
     padding: 14px 16px;
+    border: 0;
+    text-align: left;
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+  }
+  .what {
+    align-self: flex-start;
+    margin-top: 6px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    opacity: 0.8;
+    font-size: 0.8125rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 0;
+    cursor: pointer;
+  }
+  .intro {
+    margin-bottom: 12px;
+    border: 2px solid var(--accent);
+  }
+  .intro p {
+    margin: 6px 0 10px;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+  }
+  .intro-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .advice {
+    margin-top: 12px;
+  }
+  .verdict {
+    margin: 0;
+    font-weight: 650;
+    line-height: 1.4;
+  }
+  .hint-line {
+    margin: 10px 0 0;
+    font-size: 0.9375rem;
+    line-height: 1.45;
+  }
+  .next {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: var(--surface-2);
+    font-size: 0.9375rem;
+  }
+  .next-title {
+    font-weight: 600;
+  }
+  .next-text {
+    margin: 2px 0 0;
+    color: var(--text-muted);
+  }
+  .next ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    line-height: 1.5;
   }
   .m-label {
     font-size: 0.9375rem;

@@ -1,4 +1,4 @@
-import type { Activity, DiaryEntry, Fast, Food, HealthDay, Settings, WaterDay, WeightEntry } from '../types';
+import type { Activity, DiaryEntry, Dish, Fast, Food, HealthDay, Settings, WaterDay, WeightEntry } from '../types';
 import { dateKey, isDateKey } from './dates';
 import { sanitizeSettings } from './settings';
 
@@ -13,6 +13,7 @@ export interface BackupData {
   activities: Activity[];
   health: HealthDay[];
   fasts: Fast[];
+  dishes: Dish[];
 }
 
 export class BackupError extends Error {
@@ -70,6 +71,8 @@ export function parseBackup(text: string): BackupData {
     activities: list<Activity>(d.activities, (a) => isDateKey(a.date) && isStr(a.name) && isNum(a.kcal) && isNum(a.minutes)),
     health: list<HealthDay>(d.health, (h) => isDateKey(h.date) && isNum(h.activeKcal) && isNum(h.steps) && Array.isArray(h.workouts)),
     fasts: list<Fast>(d.fasts, (f) => isStr(f.start) && (f.end === null || isStr(f.end)) && isNum(f.targetHours)),
+    // I backup delle versioni prima della 0.5.0 non hanno i piatti salvati.
+    dishes: list<Dish>(d.dishes, (x) => isStr(x.id) && isStr(x.name) && Array.isArray(x.items) && isNum(x.kcal)),
   };
 }
 

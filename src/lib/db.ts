@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { Activity, DiaryEntry, Fast, Food, HealthDay, WaterDay, WeightEntry } from './types';
+import type { Activity, DiaryEntry, Dish, Fast, Food, HealthDay, WaterDay, WeightEntry } from './types';
 
 export interface KV {
   key: string;
@@ -16,6 +16,7 @@ export class NutriDB extends Dexie {
   health!: EntityTable<HealthDay, 'date'>;
   fasts!: EntityTable<Fast, 'id'>;
   kv!: EntityTable<KV, 'key'>;
+  dishes!: EntityTable<Dish, 'id'>;
 
   constructor(name = 'nutrizione') {
     super(name);
@@ -28,6 +29,10 @@ export class NutriDB extends Dexie {
       health: 'date',
       fasts: '++id, start',
       kv: 'key',
+    });
+    // Versione 2: piatti salvati dall'AI.
+    this.version(2).stores({
+      dishes: 'id, lastUsed',
     });
   }
 }

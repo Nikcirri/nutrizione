@@ -1,5 +1,14 @@
 # Novità
 
+## [0.5.0] - 2026-11-09
+
+- Modalità semplice: porzioni a occhio, semafori e consigli in parole (si attiva nel Profilo).
+- Foto AI più facile: ti dice cosa ha visto, fa una domanda e si corregge con un tocco.
+- I piatti che mangi spesso restano salvati e l'AI impara le tue correzioni.
+- Nella modalità semplice il + apre subito la fotocamera, e il Diario suggerisce cosa mangiare al prossimo pasto.
+- Tocca calorie, carboidrati, proteine, grassi o fibre per sapere cosa sono, con esempi.
+- Se la stima supera 1500 kcal l'app chiede conferma (metà o un terzo).
+
 ## [0.4.1] - 2026-11-09
 
 - Grafico delle calorie: i giorni sotto le colonne non si sovrappongono più.

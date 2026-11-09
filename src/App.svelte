@@ -90,13 +90,19 @@
     main?.scrollTo({ top: 0 });
   }
 
-  /** Il pulsante + centrale: aggiunge al pasto più probabile per l'ora attuale. */
+  /**
+   * Il pulsante + centrale: aggiunge al pasto più probabile per l'ora attuale.
+   * In modalità semplice (con la chiave di Gemini) apre subito la fotocamera della Foto AI.
+   */
   function quickAddFood() {
     void tapFeedback();
     const date = app.tab === 'oggi' ? app.date : app.today;
     if (app.tab !== 'oggi') app.tab = 'oggi';
     app.date = date;
-    sheets.addFood = { date, meal: mealForHour(new Date().getHours()) };
+    const meal = mealForHour(new Date().getHours());
+    if (app.settings.prefs.simpleMode && app.aiReady) sheets.aiMeal = { date, meal, autoCamera: true };
+    else if (app.settings.prefs.simpleMode) sheets.aiMeal = { date, meal };
+    else sheets.addFood = { date, meal };
   }
 
   onMount(() => {

@@ -85,6 +85,8 @@ export interface ConfirmOptions {
   danger?: boolean;
   /** Se presente, l'utente deve scrivere questa parola per confermare (es. "SVUOTA"). */
   requireText?: string;
+  /** Solo informazioni: un pulsante "Ho capito", senza "Annulla". */
+  infoOnly?: boolean;
 }
 
 interface DialogState extends ConfirmOptions {
@@ -101,6 +103,11 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
   return new Promise((resolve) => {
     dialog.current = { ...opts, id: nextDialogId++, resolve };
   });
+}
+
+/** Finestra con una spiegazione. */
+export function infoDialog(title: string, message: string): Promise<boolean> {
+  return confirmDialog({ title, message, confirmLabel: 'Ho capito', infoOnly: true });
 }
 
 export function resolveDialog(ok: boolean): void {

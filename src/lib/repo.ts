@@ -3,7 +3,9 @@ import type { NutriDB } from './db';
 import type { BackupData } from './logic/backup';
 import { addDays } from './logic/dates';
 import { sanitizeSettings } from './logic/settings';
-import type { Activity, DiaryEntry, Fast, Food, HealthDay, MealId, Settings, WeightEntry } from './types';
+import type { Activity, DiaryEntry, Dish, Fast, Food, HealthDay, MealId, Settings, WeightEntry } from './types';
+import { NO_HABITS, type AiHabits } from './logic/ai';
+import { normalize } from './logic/search';
 
 // ---------- Impostazioni ----------
 
@@ -40,6 +42,57 @@ export async function getAiModel(db: NutriDB): Promise<string> {
 
 export async function setAiModel(db: NutriDB, model: string): Promise<void> {
   await db.kv.put({ key: 'aiModel', value: model });
+}
+
+/** Abitudini imparate dalle correzioni alle stime dell'AI. */
+export async function getHabits(db: NutriDB): Promise<AiHabits> {
+  const row = await db.kv.get('aiHabits');
+  const v = row?.value as Partial<AiHabits> | undefined;
+  const n = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? Math.max(0, Math.min(50, x)) : 0);
+  return v ? { lessDressing: n(v.lessDressing), moreDressing: n(v.moreDressing), smaller: n(v.smaller), bigger: n(v.bigger) } : { ...NO_HABITS };
+}
+
+export async function addHabit(db: NutriDB, key: keyof AiHabits): Promise<void> {
+  const h = await getHabits(db);
+  h[key] = Math.min(50, h[key] + 1);
+  await db.kv.put({ key: 'aiHabits', value: h });
+}
+
+// ---------- Piatti salvati ----------
+
+export function dishId(name: string): string {
+  return normalize(name);
+}
+
+export async function findDish(db: NutriDB, name: string): Promise<Dish | undefined> {
+  const id = dishId(name);
+  return id ? db.dishes.get(id) : undefined;
+}
+
+/** Salva (o aggiorna) un piatto con le quantità usate questa volta. */
+export async function saveDish(db: NutriDB, name: string, items: Dish['items'], now: string): Promise<void> {
+  const id = dishId(name);
+  if (!id || !items.length) return;
+  await db.transaction('rw', db.dishes, async () => {
+    const old = await db.dishes.get(id);
+    await db.dishes.put({
+      id,
+      name: name.trim(),
+      items: plain(items),
+      kcal: Math.round(items.reduce((a, i) => a + i.kcal, 0)),
+      useCount: (old?.useCount ?? 0) + 1,
+      lastUsed: now,
+    });
+  });
+}
+
+export async function topDishes(db: NutriDB, limit = 8): Promise<Dish[]> {
+  const all = await db.dishes.toArray();
+  return all.sort((a, b) => b.lastUsed.localeCompare(a.lastUsed)).slice(0, limit);
+}
+
+export async function deleteDish(db: NutriDB, id: string): Promise<void> {
+  await db.dishes.delete(id);
 }
 
 // ---------- Alimenti ----------
@@ -230,7 +283,7 @@ export async function deleteFast(db: NutriDB, id: number): Promise<Fast | undefi
 // ---------- Backup ----------
 
 export async function exportAll(db: NutriDB): Promise<BackupData> {
-  const [settings, foods, entries, water, weights, activities, health, fasts] = await Promise.all([
+  const [settings, foods, entries, water, weights, activities, health, fasts, dishes] = await Promise.all([
     loadSettings(db),
     db.foods.toArray(),
     db.entries.toArray(),
@@ -239,13 +292,14 @@ export async function exportAll(db: NutriDB): Promise<BackupData> {
     db.activities.toArray(),
     db.health.toArray(),
     db.fasts.toArray(),
+    db.dishes.toArray(),
   ]);
-  return { settings, foods, entries, water, weights, activities, health, fasts };
+  return { settings, foods, entries, water, weights, activities, health, fasts, dishes };
 }
 
 /** Sostituisce tutti i dati con quelli del backup. */
 export async function importAll(db: NutriDB, data: BackupData): Promise<void> {
-  await db.transaction('rw', [db.foods, db.entries, db.water, db.weights, db.activities, db.health, db.fasts, db.kv], async () => {
+  await db.transaction('rw', [db.foods, db.entries, db.water, db.weights, db.activities, db.health, db.fasts, db.kv, db.dishes], async () => {
     await Promise.all([
       db.foods.clear(),
       db.entries.clear(),
@@ -254,6 +308,7 @@ export async function importAll(db: NutriDB, data: BackupData): Promise<void> {
       db.activities.clear(),
       db.health.clear(),
       db.fasts.clear(),
+      db.dishes.clear(),
     ]);
     await db.foods.bulkPut(data.foods);
     await db.entries.bulkPut(data.entries);
@@ -262,6 +317,7 @@ export async function importAll(db: NutriDB, data: BackupData): Promise<void> {
     await db.activities.bulkPut(data.activities);
     await db.health.bulkPut(data.health);
     await db.fasts.bulkPut(data.fasts);
+    await db.dishes.bulkPut(data.dishes);
     await db.kv.put({ key: 'settings', value: { ...data.settings, onboarded: true } });
   });
 }

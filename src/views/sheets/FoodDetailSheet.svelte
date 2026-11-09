@@ -6,7 +6,8 @@
   import { fmtG, fmtInt, fmtOne, macroSplit, parseNum, scale } from '../../lib/logic/nutrition';
   import { tapFeedback } from '../../lib/platform';
   import { addEntry, deleteEntry, restoreEntries, setFavorite, updateEntry } from '../../lib/repo';
-  import { sheets, type DetailRequest } from '../../lib/state/app.svelte';
+  import { app, sheets, type DetailRequest } from '../../lib/state/app.svelte';
+  import { HAND_GUIDE, PORTION_SIZES, portionGrams, type PortionSize } from '../../lib/logic/simple';
   import { showToast, showUndoToast } from '../../lib/state/ui.svelte';
   import { MEALS, type DiaryEntry, type Food, type MealId, type Portion } from '../../lib/types';
   import Icon from '../../lib/ui/Icon.svelte';
@@ -27,6 +28,12 @@
   let ready = $state(false);
 
   function initQuantity(f: Food) {
+    // Modalità semplice: si parte dalla porzione normale, scelta a occhio.
+    if (!entry && app.settings.prefs.simpleMode) {
+      choice = -1;
+      qty = fmtOne(f.portions[0]?.grams ?? 100);
+      return;
+    }
     if (entry) {
       const i = entry.portionLabel ? f.portions.findIndex((p) => p.label === entry.portionLabel) : -1;
       if (i >= 0 && entry.portionCount) {
@@ -61,9 +68,22 @@
   });
 
   const portion = $derived<Portion | null>(choice >= 0 ? (food.portions[choice] ?? null) : null);
+  const simple = $derived(app.settings.prefs.simpleMode);
+  let moreOptions = $state(false);
+  /** Porzione normale dell'alimento (la prima indicata, altrimenti 100 g). */
+  const normalGrams = $derived(food.portions[0]?.grams ?? 100);
   const count = $derived(parseNum(qty));
   const amount = $derived(count === null ? 0 : portion ? count * portion.grams : count);
   const valid = $derived(count !== null && count > 0 && amount <= 10000);
+  const selectedSize = $derived<PortionSize | null>(
+    choice === -1 ? (PORTION_SIZES.find((p) => Math.abs(amount - portionGrams(normalGrams, p.id)) < 0.6)?.id ?? null) : null,
+  );
+
+  function pickSize(size: PortionSize) {
+    choice = -1;
+    qty = fmtOne(portionGrams(normalGrams, size));
+    void tapFeedback();
+  }
   const n = $derived(scale(food.per100, amount));
   const split = $derived(macroSplit(n));
   const mealLabel = $derived(MEALS.find((m) => m.id === meal)?.label ?? '');
@@ -82,8 +102,8 @@
       brand: food.brand,
       unit: food.unit,
       amount: Math.round(amount * 10) / 10,
-      portionLabel: portion?.label,
-      portionCount: portion ? (count ?? undefined) : undefined,
+      portionLabel: portion?.label ?? (simple && selectedSize ? `Porzione ${selectedSize}` : undefined),
+      portionCount: portion ? (count ?? undefined) : simple && selectedSize ? 1 : undefined,
       per100: { ...food.per100 },
       createdAt: entry?.createdAt ?? new Date().toISOString(),
     };
@@ -181,7 +201,7 @@
         {#if food.brand}<p class="brand">{food.brand}</p>{/if}
       </div>
       <div class="hero-amount">
-        <strong class="num">{fmtOne(amount)} {food.unit}</strong>
+        <strong class="num">{simple && selectedSize ? `Porzione ${selectedSize}` : `${fmtOne(amount)} ${food.unit}`}</strong>
         <span class="num">{fmtInt(n.kcal)} kcal</span>
       </div>
     </div>
@@ -200,7 +220,7 @@
   </div>
   <p class="note center">Quota delle calorie: proteine {split.protein}% · carboidrati {split.carbs}% · grassi {split.fat}%</p>
 
-  {#if extras.length}
+  {#if extras.length && !simple}
     <div class="list extras">
       {#each extras as x (x.label)}
         <div class="row static"><span class="grow">{x.label}</span><span class="end">{fmtG(x.value ?? 0)} g</span></div>
@@ -208,13 +228,29 @@
     </div>
   {/if}
 
-  <h4 class="section-title">Quantità</h4>
+  <h4 class="section-title">{simple ? 'Quanto ne hai mangiato?' : 'Quantità'}</h4>
+  {#if simple}
+    <div class="sizes">
+      {#each PORTION_SIZES as p (p.id)}
+        <button class="size" aria-pressed={selectedSize === p.id} onclick={() => pickSize(p.id)}>
+          <span class="dots" aria-hidden="true">{p.id === 'piccola' ? '●' : p.id === 'normale' ? '●●' : '●●●'}</span>
+          {p.label}
+        </button>
+      {/each}
+    </div>
+    <p class="note">{HAND_GUIDE}</p>
+    <button class="btn btn-ghost btn-small more" onclick={() => (moreOptions = !moreOptions)}>
+      <Icon name={moreOptions ? 'chevronDown' : 'chevronRight'} size={16} /> Altre misure (grammi, fette, cucchiai…)
+    </button>
+  {/if}
+  {#if !simple || moreOptions}
   <select class="input" bind:value={choice} aria-label="Unità">
     <option value={-1}>{food.unit === 'ml' ? 'Millilitri (ml)' : 'Grammi (g)'}</option>
     {#each food.portions as p, i (p.label)}
       <option value={i}>{p.label}</option>
     {/each}
   </select>
+  {/if}
   {#if !valid && count !== null}<p class="note bad">Scrivi una quantità valida.</p>{/if}
 
   <h4 class="section-title">Pasto</h4>
@@ -238,12 +274,14 @@
   </div>
 
   {#snippet footer()}
+    {#if !simple || moreOptions}
     <div class="stepper">
       <button aria-label="Meno" onclick={() => step(-1)}><Icon name="minus" size={18} /></button>
       <input class="num" inputmode="decimal" bind:value={qty} aria-label="Quantità" disabled={!ready} />
       <span class="unit">{portion ? '×' : food.unit}</span>
       <button aria-label="Più" onclick={() => step(1)}><Icon name="plus" size={18} /></button>
     </div>
+    {/if}
     <button class="btn btn-primary go" disabled={!valid || !ready} onclick={save}>
       {entry ? 'Salva' : 'Aggiungi'} · {fmtInt(n.kcal)} kcal
     </button>
@@ -419,5 +457,38 @@
   }
   .go {
     flex: 1;
+  }
+  .sizes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .size {
+    min-height: 64px;
+    border-radius: 18px;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .size[aria-pressed='true'] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .dots {
+    font-size: 0.625rem;
+    letter-spacing: 2px;
+    color: var(--accent-text);
+  }
+  .more {
+    margin: 4px 0 8px;
+    color: var(--accent-text);
+    padding: 0 4px;
   }
 </style>

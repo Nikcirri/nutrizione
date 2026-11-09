@@ -112,6 +112,17 @@ export interface HealthDay {
   syncedAt: string;
 }
 
+/** Un piatto riconosciuto con l'AI e salvato, da riaggiungere in un tocco. */
+export interface Dish {
+  /** Nome normalizzato (minuscolo, senza accenti). */
+  id: string;
+  name: string;
+  items: { name: string; grams: number; kcal: number; carbs: number; protein: number; fat: number; fiber: number }[];
+  kcal: number;
+  useCount: number;
+  lastUsed: string;
+}
+
 export interface Fast {
   id?: number;
   start: string;
@@ -149,6 +160,8 @@ export interface Goals {
 }
 
 export interface Prefs {
+  /** Modalità semplice: porzioni a occhio, giudizi a colori e consigli in parole invece di grammi e numeri. */
+  simpleMode: boolean;
   /** Aggiunge all'obiettivo le calorie bruciate con l'attività. */
   addActivityKcal: boolean;
   glassMl: number;

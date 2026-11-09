@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  habitsHints,
+  isDressing,
+  whyText,
+  NO_HABITS,
   buildPrompt,
   extractJson,
   geminiProblem,
@@ -38,7 +42,7 @@ describe('AI: risposta', () => {
     expect(parseAiMeal('non so')).toBeNull();
     expect(parseAiMeal('{"dish":"x"}')).toBeNull();
     expect(extractJson('{rotto')).toBeNull();
-    expect(parseAiMeal('{"items":[]}')).toEqual({ dish: 'Piatto', items: [], confidence: 'media', note: '' });
+    expect(parseAiMeal('{"items":[]}')).toEqual({ dish: 'Piatto', items: [], confidence: 'media', note: '', portion: 'normale', why: '', questions: [] });
   });
 
   it('cambia la quantità e calcola i valori per 100 g', () => {
@@ -80,5 +84,47 @@ describe('AI: velocità', () => {
     expect(waitingMessage(1, true)).toBe('Invio la foto…');
     expect(waitingMessage(5, false)).toBe('Leggo la descrizione…');
     expect(waitingMessage(30, true)).toMatch(/più del solito/);
+  });
+});
+
+describe('AI: modalità semplice', () => {
+  it('legge porzione, perché e domande (scarta quelle rotte)', () => {
+    const meal = parseAiMeal(JSON.stringify({
+      dish: 'Cotoletta', portion: 'Abbondante', why: 'Quasi metà arriva dalla frittura.',
+      items: [{ name: 'Cotoletta', grams: 200, kcal: 520, carbs: 26, protein: 36, fat: 30, fiber: 1 }],
+      questions: [
+        { question: 'Era fritta o al forno?', options: [{ label: 'Fritta', factor: 1, add: null }, { label: 'Al forno', factor: 0.75 }] },
+        { question: 'Zucchero?', options: [{ label: 'No' }, { label: 'Sì', add: { name: 'Zucchero', grams: 5, kcal: 20, carbs: 5 } }] },
+        { question: 'Una sola risposta', options: [{ label: 'x' }] },
+        { question: 'Troppe', options: [{ label: 'a' }, { label: 'b' }] },
+      ],
+    }));
+    expect(meal?.portion).toBe('abbondante');
+    expect(meal?.why).toMatch(/frittura/);
+    expect(meal?.questions).toHaveLength(2);
+    expect(meal?.questions[0]?.options[1]).toEqual({ label: 'Al forno', factor: 0.75, add: null });
+    expect(meal?.questions[1]?.options[1]?.add).toMatchObject({ name: 'Zucchero', grams: 5, kcal: 20 });
+  });
+  it('riconosce i condimenti', () => {
+    expect(isDressing({ name: 'Olio extravergine', kcal: 90, fat: 10 })).toBe(true);
+    expect(isDressing({ name: 'Parmigiano', kcal: 39, fat: 2.8 })).toBe(true);
+    expect(isDressing({ name: 'Noci', kcal: 200, fat: 19 })).toBe(true);
+    expect(isDressing({ name: 'Spaghetti cotti', kcal: 316, fat: 1.4 })).toBe(false);
+  });
+  it('perché: dall’AI o dall’ingrediente più calorico', () => {
+    const items = [
+      { name: 'Pasta', grams: 200, kcal: 300, carbs: 60, protein: 10, fat: 1, fiber: 2 },
+      { name: 'Olio', grams: 10, kcal: 90, carbs: 0, protein: 0, fat: 10, fiber: 0 },
+    ];
+    expect(whyText({ why: 'Dall’AI' }, items)).toBe('Dall’AI');
+    expect(whyText({ why: '' }, items)).toBe('La parte più calorica è pasta (circa 77% del piatto).');
+  });
+  it('abitudini dalle correzioni e nel prompt', () => {
+    expect(habitsHints(NO_HABITS)).toEqual([]);
+    const hints = habitsHints({ lessDressing: 3, moreDressing: 0, smaller: 0, bigger: 2 });
+    expect(hints).toHaveLength(2);
+    const prompt = buildPrompt('', true, { habits: hints, knownDishes: ['Colazione solita'] });
+    expect(prompt).toContain('condisce poco');
+    expect(prompt).toContain('Colazione solita');
   });
 });

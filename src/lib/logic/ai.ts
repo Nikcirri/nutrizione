@@ -12,17 +12,44 @@ export interface AiItem {
 }
 
 export type AiConfidence = 'alta' | 'media' | 'bassa';
+export type AiPortion = 'piccola' | 'normale' | 'abbondante';
+
+/** Risposta pronta a una domanda: moltiplica le calorie del piatto e/o aggiunge un ingrediente. */
+export interface AiOption {
+  label: string;
+  factor: number;
+  add: AiItem | null;
+}
+
+export interface AiQuestion {
+  question: string;
+  options: AiOption[];
+}
 
 export interface AiMeal {
   dish: string;
   items: AiItem[];
   confidence: AiConfidence;
   note: string;
+  portion: AiPortion;
+  /** Una frase semplice su da dove vengono le calorie. */
+  why: string;
+  /** Domande su ciò che dalla foto non si vede (al massimo 2). */
+  questions: AiQuestion[];
+}
+
+export interface PromptContext {
+  /** Abitudini imparate dalle correzioni (frasi già pronte). */
+  habits?: string[];
+  /** Piatti che l'utente mangia spesso. */
+  knownDishes?: string[];
 }
 
 /** Istruzioni per il modello. La descrizione dell'utente va in fondo, separata. */
-export function buildPrompt(description: string, hasPhoto: boolean): string {
+export function buildPrompt(description: string, hasPhoto: boolean, context: PromptContext = {}): string {
   const desc = description.trim();
+  const habits = (context.habits ?? []).filter(Boolean);
+  const dishes = (context.knownDishes ?? []).filter(Boolean).slice(0, 15);
   return [
     'Sei un nutrizionista esperto di cucina italiana. Stima i valori nutrizionali del piatto' +
       (hasPhoto ? ' nella foto' : '') +
@@ -33,8 +60,13 @@ export function buildPrompt(description: string, hasPhoto: boolean): string {
     'Dividi il piatto nei suoi ingredienti principali (massimo 10), compresi olio, burro, condimenti e salse che si vedono o che la ricetta usa normalmente.',
     'Per ogni ingrediente dai i grammi presenti nel piatto e i valori per QUELLA quantità (non per 100 g): kcal, carboidrati, proteine, grassi e fibre in grammi.',
     'Scrivi i nomi in italiano. Se nella foto non c’è cibo, restituisci "items": [].',
+    'L’utente non conosce i valori nutrizionali: in "why" spiega in una frase semplice da dove arriva la maggior parte delle calorie (es. "Quasi metà arriva dall’olio e dal formaggio").',
+    'In "portion" di’ se la porzione è piccola, normale o abbondante rispetto a una porzione italiana normale.',
+    'Fai al massimo 2 domande, SOLO su cose che non si vedono e che cambiano molto le calorie (es. fritto o al forno, caffè zuccherato o no, condimento con panna o no). Ogni domanda ha 2 o 3 risposte brevi: la prima è quella che hai già usato nella stima (factor 1, add null); per le altre indica "factor" (per quanto moltiplicare tutte le calorie del piatto) oppure "add" (un ingrediente da aggiungere, con grammi e valori). Se non serve nessuna domanda: "questions": [].',
+    habits.length ? `Abitudini di questo utente: ${habits.join(' ')}` : '',
+    dishes.length ? `Piatti che l’utente mangia spesso (se il piatto è uno di questi, usa esattamente lo stesso nome): ${dishes.join('; ')}.` : '',
     'Rispondi SOLO con JSON valido, senza testo prima o dopo, con questa forma esatta:',
-    '{"dish":"nome del piatto","confidence":"alta|media|bassa","note":"una frase breve su cosa è incerto","items":[{"name":"...","grams":0,"kcal":0,"carbs":0,"protein":0,"fat":0,"fiber":0}]}',
+    '{"dish":"nome del piatto","portion":"piccola|normale|abbondante","confidence":"alta|media|bassa","why":"…","note":"una frase breve su cosa è incerto","items":[{"name":"...","grams":0,"kcal":0,"carbs":0,"protein":0,"fat":0,"fiber":0}],"questions":[{"question":"...","options":[{"label":"...","factor":1,"add":null}]}]}',
     desc ? `Descrizione dell’utente: """${desc.slice(0, 600)}"""` : '',
   ]
     .filter(Boolean)
@@ -85,12 +117,80 @@ export function parseAiMeal(text: string): AiMeal | null {
   if (!Array.isArray(o.items)) return null;
   const items = o.items.map(parseItem).filter((x): x is AiItem => x !== null).slice(0, 15);
   const conf = typeof o.confidence === 'string' ? o.confidence.toLowerCase() : '';
+  const portion = typeof o.portion === 'string' ? o.portion.toLowerCase() : '';
   return {
     dish: typeof o.dish === 'string' && o.dish.trim() ? o.dish.trim().slice(0, 80) : 'Piatto',
     items,
     confidence: conf === 'alta' || conf === 'media' || conf === 'bassa' ? conf : 'media',
     note: typeof o.note === 'string' ? o.note.trim().slice(0, 240) : '',
+    portion: portion === 'piccola' || portion === 'abbondante' ? portion : 'normale',
+    why: typeof o.why === 'string' ? o.why.trim().slice(0, 200) : '',
+    questions: Array.isArray(o.questions) ? o.questions.map(parseQuestion).filter((q): q is AiQuestion => q !== null).slice(0, 2) : [],
   };
+}
+
+function parseQuestion(raw: unknown): AiQuestion | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const o = raw as Record<string, unknown>;
+  const question = typeof o.question === 'string' ? o.question.trim().slice(0, 120) : '';
+  if (!question || !Array.isArray(o.options)) return null;
+  const options = o.options
+    .map((x): AiOption | null => {
+      if (typeof x !== 'object' || x === null) return null;
+      const op = x as Record<string, unknown>;
+      const label = typeof op.label === 'string' ? op.label.trim().slice(0, 40) : '';
+      if (!label) return null;
+      const f = num(op.factor);
+      return { label, factor: f === null ? 1 : Math.min(3, Math.max(0.3, f)), add: parseItem(op.add) };
+    })
+    .filter((x): x is AiOption => x !== null)
+    .slice(0, 3);
+  return options.length >= 2 ? { question, options } : null;
+}
+
+// ---------- Correzioni con i pulsanti ----------
+
+const DRESSING = /olio|burro|margarin|maionese|panna|condiment|sugo|salsa|rag[uù]|pesto|formagg|parmigian|grana|pecorino|mozzarell|guanciale|pancetta|lardo|strutto|besciamella|zucchero|miele|crema|nutella|ketchup/i;
+
+/** Condimenti e ingredienti "grassi": quelli che cambiano con "più/meno condito". */
+export function isDressing(item: Pick<AiItem, 'name' | 'kcal' | 'fat'>): boolean {
+  return DRESSING.test(item.name) || (item.kcal > 0 && (item.fat * 9) / item.kcal > 0.7);
+}
+
+export function totalKcal(items: AiItem[]): number {
+  return items.reduce((a, i) => a + i.kcal, 0);
+}
+
+/** Oltre questa soglia un piatto è sospetto (forse era da dividere). */
+export const SUSPICIOUS_KCAL = 1500;
+
+/** Perché tante calorie: se l'AI non lo ha detto, si guarda l'ingrediente che pesa di più. */
+export function whyText(meal: Pick<AiMeal, 'why'>, items: AiItem[]): string {
+  if (meal.why) return meal.why;
+  const total = totalKcal(items);
+  const top = [...items].sort((a, b) => b.kcal - a.kcal)[0];
+  if (!top || total <= 0) return '';
+  const share = Math.round((top.kcal / total) * 100);
+  return `La parte più calorica è ${top.name.toLowerCase()} (circa ${share}% del piatto).`;
+}
+
+export interface AiHabits {
+  lessDressing: number;
+  moreDressing: number;
+  smaller: number;
+  bigger: number;
+}
+
+export const NO_HABITS: AiHabits = { lessDressing: 0, moreDressing: 0, smaller: 0, bigger: 0 };
+
+/** Abitudini imparate dalle correzioni, in frasi da dare all'AI. */
+export function habitsHints(h: AiHabits): string[] {
+  const out: string[] = [];
+  if (h.lessDressing - h.moreDressing >= 2) out.push('Di solito condisce poco: stima olio e condimenti scarsi.');
+  if (h.moreDressing - h.lessDressing >= 2) out.push('Di solito condisce molto: stima olio e condimenti generosi.');
+  if (h.smaller - h.bigger >= 2) out.push('Di solito mangia porzioni più piccole della media.');
+  if (h.bigger - h.smaller >= 2) out.push('Di solito mangia porzioni più grandi della media.');
+  return out;
 }
 
 /** Lo stesso ingrediente con un'altra quantità (i valori cambiano in proporzione). */

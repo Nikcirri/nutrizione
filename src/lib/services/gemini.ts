@@ -2,7 +2,7 @@
 // Nell'app Android la richiesta parte dal telefono con CapacitorHttp.
 import { CapacitorHttp } from '@capacitor/core';
 import { db } from '../db';
-import { buildPrompt, geminiProblem, geminiText, modelOrder, parseAiMeal, problemMessage, type AiMeal } from '../logic/ai';
+import { buildPrompt, geminiProblem, geminiText, modelOrder, parseAiMeal, problemMessage, type AiMeal, type PromptContext } from '../logic/ai';
 import { UserError } from '../errors';
 import { isNative } from '../platform';
 import { getAiModel, setAiModel } from '../repo';
@@ -69,8 +69,13 @@ function body(prompt: string, image: { base64: string; mime: string } | null, wi
 }
 
 /** Stima ingredienti e valori del piatto. Lancia UserError con un messaggio comprensibile. */
-export async function analyzeMeal(key: string, description: string, image: { base64: string; mime: string } | null): Promise<AiMeal> {
-  const prompt = buildPrompt(description, image !== null);
+export async function analyzeMeal(
+  key: string,
+  description: string,
+  image: { base64: string; mime: string } | null,
+  context: PromptContext = {},
+): Promise<AiMeal> {
+  const prompt = buildPrompt(description, image !== null, context);
   const models = modelOrder(MODELS, await getAiModel(db).catch(() => ''));
   let lastProblem: ReturnType<typeof geminiProblem> = 'other';
   for (const [i, model] of models.entries()) {

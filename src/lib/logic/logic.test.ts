@@ -316,6 +316,7 @@ describe('backup', () => {
     activities: [],
     health: [],
     fasts: [],
+    dishes: [],
   };
   it('andata e ritorno, scartando le voci rotte', () => {
     const back = parseBackup(makeBackup(data, '0.1.0'));

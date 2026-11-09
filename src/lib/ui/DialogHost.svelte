@@ -24,7 +24,9 @@
       </label>
     {/if}
     <div class="actions">
-      <button class="btn btn-ghost" onclick={() => resolveDialog(false)}>{current.cancelLabel ?? 'Annulla'}</button>
+      {#if !current.infoOnly}
+        <button class="btn btn-ghost" onclick={() => resolveDialog(false)}>{current.cancelLabel ?? 'Annulla'}</button>
+      {/if}
       <button
         class="btn"
         class:btn-primary={!current.danger}

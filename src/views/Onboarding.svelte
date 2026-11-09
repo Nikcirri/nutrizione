@@ -6,7 +6,7 @@
   import { backupSummary } from '../lib/logic/backup';
   import { setWeight } from '../lib/repo';
   import { readBackupFile, restoreBackup } from '../lib/services/backupFile';
-  import { app, initApp, refreshWeight, updateSettings } from '../lib/state/app.svelte';
+  import { app, dismissSimpleIntro, initApp, refreshWeight, updateSettings } from '../lib/state/app.svelte';
   import { confirmDialog, withBusy } from '../lib/state/ui.svelte';
   import type { Profile } from '../lib/types';
   import Icon from '../lib/ui/Icon.svelte';
@@ -20,6 +20,7 @@
   let height = $state(String(p.heightCm));
   let weight = $state(fmtOne(p.weightKg));
   let target = $state('');
+  let simpleMode = $state(true);
 
   const b = $derived(parseNum(birth));
   const h = $derived(parseNum(height));
@@ -45,8 +46,10 @@
       await setWeight(db, app.today, finalProfile.weightKg, new Date().toISOString());
       await updateSettings((s) => {
         s.profile = { ...finalProfile };
+        s.prefs.simpleMode = simpleMode;
         s.onboarded = true;
       });
+      await dismissSimpleIntro();
       await refreshWeight();
     } catch (e) {
       reportError(e);
@@ -167,6 +170,15 @@
           {rateLabel(plan.effectiveRateKg)} a settimana. Per diete più restrittive fatti seguire da un medico o un nutrizionista.
         </p>
       {/if}
+      <h3 class="ask">Conosci i valori nutrizionali?</h3>
+      <button class="option" class:selected={simpleMode} onclick={() => (simpleMode = true)}>
+        <span class="grow"><strong>No, tienila semplice</strong><span>Porzioni a occhio, colori e consigli in parole. Il + apre subito la fotocamera.</span></span>
+        <span class="radio"><Icon name="check" size={16} /></span>
+      </button>
+      <button class="option" class:selected={!simpleMode} onclick={() => (simpleMode = false)}>
+        <span class="grow"><strong>Sì, mostrami tutti i numeri</strong><span>Grammi, carboidrati, proteine e grassi.</span></span>
+        <span class="radio"><Icon name="check" size={16} /></span>
+      </button>
       <p class="lead small">Sono stime: potrai cambiare tutto nel Profilo.</p>
     </section>
   {/if}
@@ -257,6 +269,10 @@
   }
   .small {
     font-size: 0.875rem;
+  }
+  .ask {
+    margin: 8px 0 0;
+    font-size: 1.125rem;
   }
   .hero-card {
     display: flex;
