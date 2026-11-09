@@ -2,4 +2,6 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <external-path name="my_images" path="." />
     <cache-path name="my_cache_images" path="." />
+    <!-- Cartella interna dell'app: la usa anche la fotocamera per le foto dei piatti. -->
+    <files-path name="my_files" path="." />
 </paths>
