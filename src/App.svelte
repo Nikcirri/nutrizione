@@ -19,6 +19,7 @@
   import Progressi from './views/Progressi.svelte';
   import ActivitySheet from './views/sheets/ActivitySheet.svelte';
   import AddFoodSheet from './views/sheets/AddFoodSheet.svelte';
+  import AiMealSheet from './views/sheets/AiMealSheet.svelte';
   import CreateFoodSheet from './views/sheets/CreateFoodSheet.svelte';
   import FoodDetailSheet from './views/sheets/FoodDetailSheet.svelte';
   import MyFoodsSheet from './views/sheets/MyFoodsSheet.svelte';
@@ -139,6 +140,7 @@
   </div>
 
   {#if sheets.addFood}<AddFoodSheet request={sheets.addFood} />{/if}
+  {#if sheets.aiMeal}<AiMealSheet request={sheets.aiMeal} />{/if}
   {#if sheets.myFoods}<MyFoodsSheet />{/if}
   {#if sheets.detail}<FoodDetailSheet request={sheets.detail} />{/if}
   {#if sheets.createFood}<CreateFoodSheet request={sheets.createFood} />{/if}
@@ -161,11 +163,14 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+    /* Lo spazio dell'orologio in alto resta fisso: il contenuto scorre sotto di lui, non dietro. */
+    padding-top: var(--safe-top);
+    background: var(--bg);
   }
   main {
     flex: 1;
     overflow-y: auto;
-    padding: calc(var(--safe-top) + 8px) 16px 24px;
+    padding: 8px 16px 24px;
     -webkit-overflow-scrolling: touch;
   }
   .update {

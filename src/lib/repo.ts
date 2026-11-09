@@ -21,6 +21,17 @@ function plain<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
 }
 
+/** Chiave di Gemini: salvata a parte, così non finisce nei file di backup. */
+export async function getAiKey(db: NutriDB): Promise<string> {
+  const row = await db.kv.get('geminiKey');
+  return typeof row?.value === 'string' ? row.value : '';
+}
+
+export async function setAiKey(db: NutriDB, key: string): Promise<void> {
+  if (key.trim()) await db.kv.put({ key: 'geminiKey', value: key.trim() });
+  else await db.kv.delete('geminiKey');
+}
+
 // ---------- Alimenti ----------
 
 /** Salva l'alimento usato (se è nuovo) e aggiorna "usato di recente". */

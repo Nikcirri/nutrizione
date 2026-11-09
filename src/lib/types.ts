@@ -67,6 +67,8 @@ export interface DiaryEntry {
   /** Copia dei valori per 100 al momento dell'aggiunta: se l'alimento cambia, il diario resta com'era. */
   per100: Nutrients;
   quick?: boolean;
+  /** Stimato dall'AI da una foto o una descrizione. */
+  ai?: boolean;
   createdAt: string;
 }
 

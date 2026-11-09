@@ -1,5 +1,6 @@
 import type { Fast } from '../types';
 
+/** "16:8" = 16 ore di digiuno e 8 ore in cui si mangia (insieme fanno 24). */
 export const FAST_PLANS: readonly { hours: number; label: string; hint: string }[] = [
   { hours: 12, label: '12:12', hint: 'Per iniziare' },
   { hours: 14, label: '14:10', hint: 'Facile' },
@@ -7,6 +8,11 @@ export const FAST_PLANS: readonly { hours: number; label: string; hint: string }
   { hours: 18, label: '18:6', hint: 'Impegnativo' },
   { hours: 20, label: '20:4', hint: 'Difficile' },
 ];
+
+/** Ore in cui si mangia con un piano di `hours` ore di digiuno. */
+export function eatingHours(hours: number): number {
+  return Math.max(0, 24 - hours);
+}
 
 export interface FastStatus {
   elapsedMs: number;

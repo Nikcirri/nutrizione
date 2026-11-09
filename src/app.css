@@ -40,24 +40,25 @@
 }
 
 @media (prefers-color-scheme: dark) {
+  /* Tema scuro neutro: sfondi e schede grigio/nero, il verde resta solo sui pulsanti e sugli indicatori. */
   :root {
-    --bg: #0d110d;
-    --surface: #171c17;
-    --surface-2: #1f261e;
-    --text: #eef3ea;
-    --text-muted: #98a395;
+    --bg: #0b0b0b;
+    --surface: #171717;
+    --surface-2: #222222;
+    --text: #f2f2f2;
+    --text-muted: #a3a3a3;
     --accent: #9ad85a;
     --accent-text: #b4e67f;
-    --accent-soft: #263820;
+    --accent-soft: #262626;
     --accent-contrast: #132008;
-    --lime-card: linear-gradient(140deg, #2c4419 0%, #3b5c1f 100%);
-    --lime-card-text: #f1f9e6;
-    --ring-on-lime: #c7f08f;
+    --lime-card: #1c1c1c;
+    --lime-card-text: #f2f2f2;
+    --ring-on-lime: #9ad85a;
+    --ring-track-on-lime: #2e2e2e;
     --chart: #63a536;
-    --ring-track-on-lime: rgb(255 255 255 / 0.12);
-    --ink: #e9f3e1;
-    --ink-contrast: #121712;
-    --border: #252d24;
+    --ink: #f2f2f2;
+    --ink-contrast: #111111;
+    --border: #2a2a2a;
     --carbs: #f4bf55;
     --protein: #7ea8f3;
     --fat: #f28a8a;

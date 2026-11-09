@@ -2,9 +2,11 @@
 
 - App personale tipo YAZIO: diario dei pasti, calorie e macro, acqua, peso, digiuno, attività (anche da Health Connect).
 - Stack: Vite + Svelte 5 (runes) + TypeScript strict + Capacitor 8 Android, dati in IndexedDB con Dexie. Niente CDN: tutto incluso nell'app.
-  Rete solo per Open Food Facts (ricerca e codici a barre, via `CapacitorHttp` con User-Agent dell'app) e per il controllo aggiornamenti su GitHub.
+  Rete solo per Open Food Facts (ricerca e codici a barre, via `CapacitorHttp` con User-Agent dell'app), per Google Gemini ("Foto AI", chiave personale dell'utente) e per il controllo aggiornamenti su GitHub.
+- Foto AI: `src/lib/services/gemini.ts` (modelli in ordine di preferenza, si passa al successivo se manca o ha finito il limite gratuito) e `src/lib/logic/ai.ts` (prompt e lettura della risposta, con test). La chiave sta in `kv` con nome `geminiKey`, fuori dalle impostazioni: non deve mai finire nei backup.
 - Logica in funzioni pure dentro `src/lib/logic`, con test Vitest. Il database passa da `src/lib/repo.ts` (test con fake-indexeddb in `src/lib/repo.test.ts`).
 - Grafica: tema verde lime (variabili in `src/app.css`), schede bianche molto arrotondate, carattere Outfit incluso. Il colore dei grafici è `--chart` (verificato per il contrasto).
+  Nel tema scuro sfondi e schede sono grigio/nero neutri (l'utente non vuole la sfumatura verde): il verde resta solo su pulsanti e indicatori.
 - Implementa tutto per intero: niente codice troncato, niente `TODO`, niente funzioni vuote o segnaposto.
 - Fine di ogni modifica, sempre in quest'ordine:
   1. `npm run verify` (controllo tipi + test + build) deve passare;

@@ -9,6 +9,9 @@
   import { APP_VERSION, isNative, openExternal } from '../lib/platform';
   import { readBackupFile, restoreBackup, shareBackup } from '../lib/services/backupFile';
   import { healthAuthorized, openHealthSettings } from '../lib/services/health';
+  import { db } from '../lib/db';
+  import { getAiKey, setAiKey } from '../lib/repo';
+  import AiKeyForm from '../lib/ui/AiKeyForm.svelte';
   import { checkForUpdates } from '../lib/services/updates';
   import { app, currentTargets, initApp, sheets, updateSettings, weightForCalc } from '../lib/state/app.svelte';
   import { confirmDialog, showToast, withBusy } from '../lib/state/ui.svelte';
@@ -25,8 +28,13 @@
   const year = new Date().getFullYear();
   let healthGranted = $state<boolean | null>(null);
   let checking = $state(false);
+  let aiKey = $state<string | null>(null);
+  let changingKey = $state(false);
 
   onMount(() => {
+    getAiKey(db)
+      .then((k) => (aiKey = k))
+      .catch(() => (aiKey = ''));
     if (isNative() && prefs.healthConnected) {
       healthAuthorized()
         .then((ok) => (healthGranted = ok))
@@ -55,6 +63,14 @@
     } catch (e) {
       reportError(e);
     }
+  }
+
+  async function removeAiKey() {
+    const ok = await confirmDialog({ title: 'Togliere la chiave di Gemini?', message: 'Per usare di nuovo la foto AI dovrai incollarla ancora.', confirmLabel: 'Togli', danger: true });
+    if (!ok) return;
+    await setAiKey(db, '');
+    aiKey = '';
+    showToast('Chiave tolta');
   }
 
   async function exportBackup() {
@@ -267,6 +283,29 @@
   Con l’orologio collegato scegli “Sedentario” in “Quanto ti muovi”, così l’attività non viene contata due volte.
 </p>
 
+<h3 class="section-title">Intelligenza artificiale</h3>
+{#if aiKey && !changingKey}
+  <div class="list">
+    <div class="switch-row">
+      <span class="badge-icon ai"><Icon name="sparkles" size={18} /></span>
+      <span class="grow">Google Gemini<span class="sub">Collegato · chiave …{aiKey.slice(-4)}</span></span>
+      <button class="btn btn-ghost btn-small" onclick={() => (changingKey = true)}>Cambia</button>
+      <button class="btn btn-ghost btn-small del" onclick={removeAiKey}>Togli</button>
+    </div>
+  </div>
+  <p class="note">Serve per “Foto AI” quando aggiungi un pasto: fotografi il piatto e l’app stima ingredienti e valori.</p>
+{:else if aiKey !== null}
+  <div class="card">
+    <AiKeyForm
+      onsaved={(k) => {
+        aiKey = k;
+        changingKey = false;
+      }}
+    />
+    {#if changingKey}<button class="btn btn-ghost btn-block" onclick={() => (changingKey = false)}>Annulla</button>{/if}
+  </div>
+{/if}
+
 <h3 class="section-title">Dati</h3>
 <div class="list">
   <button class="switch-row link" onclick={() => (sheets.myFoods = true)}>
@@ -402,6 +441,13 @@
   }
   .link :global(svg) {
     color: var(--text-muted);
+  }
+  .badge-icon.ai {
+    background: var(--accent-soft);
+    color: var(--accent-text);
+  }
+  .del {
+    color: var(--danger);
   }
   .badge-icon {
     width: 34px;

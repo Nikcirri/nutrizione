@@ -6,9 +6,10 @@ Diario alimentare per Android, con le stesse funzioni principali di YAZIO.
 - **Alimenti**: più di 140 alimenti di base già nell'app (funzionano senza internet), ricerca online su Open Food Facts, scanner dei codici a barre, alimenti creati da te, preferiti e recenti, "Solo kcal" e "Copia dall'ultimo giorno".
 - **Obiettivi**: calorie calcolate dal profilo (formula di Mifflin-St Jeor) per perdere, mantenere o aumentare peso; macronutrienti in percentuale.
 - **Acqua**, **peso** con grafico, **digiuno intermittente** con timer e avviso, **attività** inserite a mano o lette dall'orologio tramite **Health Connect**.
+- **Foto AI**: fotografa il piatto e Google Gemini stima ingredienti, grammi e valori (serve una chiave gratuita di Google AI Studio, da mettere nel Profilo).
 - Backup in un file, controllo automatico degli aggiornamenti, tema chiaro e scuro.
 
-Tutti i dati restano sul telefono.
+Tutti i dati restano sul telefono. Solo se usi "Foto AI", la foto e la descrizione del piatto vengono mandate a Google Gemini.
 
 ## Installare l'app
 

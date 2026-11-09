@@ -155,7 +155,9 @@
     ].filter((x) => typeof x.value === 'number'),
   );
   const sourceText = $derived(
-    food.source === 'off'
+    entry?.ai
+      ? 'Stimato con l’AI'
+      : food.source === 'off'
       ? 'Open Food Facts'
       : food.source === 'base'
         ? 'Valori medi indicativi'

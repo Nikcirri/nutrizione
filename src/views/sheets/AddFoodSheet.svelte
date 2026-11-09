@@ -149,6 +149,9 @@
     <button class="action" onclick={scan} disabled={!isNative()}>
       <Icon name="barcode" /> Scansiona
     </button>
+    <button class="action ai" onclick={() => (sheets.aiMeal = { date: request.date, meal: request.meal })}>
+      <Icon name="sparkles" /> Foto AI
+    </button>
     <button class="action" onclick={() => (sheets.createFood = { date: request.date, meal: request.meal, name: trimmed || undefined })}>
       <Icon name="edit" /> Crea
     </button>
@@ -284,7 +287,7 @@
   }
   .actions {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 8px;
     margin: 12px 0 4px;
   }
@@ -298,10 +301,19 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 600;
     color: var(--text);
     cursor: pointer;
+    padding: 0 2px;
+  }
+  .action.ai {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .action.ai :global(svg) {
+    color: var(--accent-contrast);
   }
   .action :global(svg) {
     color: var(--accent-text);

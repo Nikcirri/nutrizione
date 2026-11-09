@@ -2,7 +2,7 @@
   import { db } from '../lib/db';
   import { reportError } from '../lib/errors';
   import { dateTimeLabel, fromLocalInput, timeLabel, toLocalInput } from '../lib/logic/dates';
-  import { FAST_PLANS, fastStats, fastStatus, formatClock, formatHours } from '../lib/logic/fasting';
+  import { FAST_PLANS, eatingHours, fastStats, fastStatus, formatClock, formatHours } from '../lib/logic/fasting';
   import { tapFeedback } from '../lib/platform';
   import { allFasts, deleteFast, startFast, updateFast } from '../lib/repo';
   import { scheduleFastNotification, cancelFastNotification } from '../lib/services/notifications';
@@ -120,7 +120,7 @@
     {:else}
       <span class="cap">Piano</span>
       <span class="clock num">{FAST_PLANS.find((p) => p.hours === plan)?.label ?? `${plan} h`}</span>
-      <span class="cap">{plan} ore di digiuno</span>
+      <span class="cap">{plan} h digiuno · {eatingHours(plan)} h pasti</span>
     {/if}
   </Ring>
 
@@ -143,11 +143,17 @@
 </section>
 
 <h3 class="section-title">Piano</h3>
+<p class="explain">
+  Il primo numero sono le ore di <strong>digiuno</strong>, il secondo le ore in cui <strong>mangi</strong> (insieme fanno 24). Per esempio con
+  16:8 ceni alle 20 e mangi di nuovo alle 12 del giorno dopo. Il timer conta le ore di digiuno.
+</p>
 <div class="plans">
   {#each FAST_PLANS as p (p.hours)}
     <button class="plan card" class:selected={p.hours === plan} onclick={() => setPlan(p.hours)}>
       <strong class="num">{p.label}</strong>
-      <span>{p.hint}</span>
+      <span class="hours num"><Icon name="timer" size={13} /> {p.hours} h digiuno</span>
+      <span class="hours num"><Icon name="meal" size={13} /> {eatingHours(p.hours)} h pasti</span>
+      <span class="hint">{p.hint}</span>
     </button>
   {/each}
 </div>
@@ -273,9 +279,26 @@
   .plan strong {
     font-size: 1.25rem;
   }
-  .plan span {
+  .plan .hours {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 0.75rem;
+    color: var(--text);
+  }
+  .plan .hint {
+    margin-top: 2px;
+    font-size: 0.6875rem;
     color: var(--text-muted);
+  }
+  .explain {
+    margin: -2px 4px 10px;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+  .explain strong {
+    color: var(--text);
   }
   .plan.selected {
     border-color: var(--accent);
