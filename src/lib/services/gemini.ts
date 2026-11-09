@@ -98,12 +98,20 @@ export async function analyzeMeal(key: string, description: string, image: { bas
 
 export type KeyCheck = 'ok' | 'invalid' | 'error';
 
-/** Controlla che la chiave funzioni (senza usare il limite delle analisi). */
+/**
+ * Controlla che la chiave funzioni con una richiesta minuscola al modello più leggero
+ * (le chiavi nuove "AQ." non sempre possono leggere l'elenco dei modelli).
+ */
 export async function checkKey(key: string): Promise<KeyCheck> {
-  const res = await request('GET', `${BASE}/models?pageSize=1`, key);
+  const model = MODELS[MODELS.length - 1];
+  const res = await request('POST', `${BASE}/models/${model}:generateContent`, key, {
+    contents: [{ role: 'user', parts: [{ text: 'Rispondi solo: ok' }] }],
+    generationConfig: { maxOutputTokens: 5 },
+  });
   if (res.status >= 200 && res.status < 300) return 'ok';
   const problem = geminiProblem(res.status, res.data);
   if (problem === 'key') return 'invalid';
   if (problem === 'region') throw new UserError(problemMessage('region'));
-  return 'error';
+  // Limite raggiunto o modello non disponibile: la chiave in sé va bene.
+  return problem === 'quota' ? 'ok' : 'error';
 }

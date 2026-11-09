@@ -2,7 +2,8 @@
 
 export const RELEASES_API = 'https://api.github.com/repos/Nikcirri/nutrizione/releases/latest';
 export const RELEASES_PAGE = 'https://github.com/Nikcirri/nutrizione/releases/latest';
-export const AUTO_CHECK_HOURS = 24;
+/** Controllo automatico all'apertura e al ritorno nell'app, al massimo ogni 10 minuti. */
+export const AUTO_CHECK_MINUTES = 10;
 
 /** "v1.2.3" o "1.2.3" → [1, 2, 3]. */
 export function parseVersion(v: string): [number, number, number] | null {
@@ -54,5 +55,5 @@ export function releaseNotes(body: string, max = 6): string[] {
 export function shouldAutoCheck(lastCheck: string | null, now: Date): boolean {
   if (!lastCheck) return true;
   const last = new Date(lastCheck).getTime();
-  return !Number.isFinite(last) || now.getTime() - last >= AUTO_CHECK_HOURS * 3_600_000;
+  return !Number.isFinite(last) || now.getTime() - last >= AUTO_CHECK_MINUTES * 60_000;
 }

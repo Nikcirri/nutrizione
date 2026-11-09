@@ -143,10 +143,6 @@
 </section>
 
 <h3 class="section-title">Piano</h3>
-<p class="explain">
-  Il primo numero sono le ore di <strong>digiuno</strong>, il secondo le ore in cui <strong>mangi</strong> (insieme fanno 24). Per esempio con
-  16:8 ceni alle 20 e mangi di nuovo alle 12 del giorno dopo. Il timer conta le ore di digiuno.
-</p>
 <div class="plans">
   {#each FAST_PLANS as p (p.hours)}
     <button class="plan card" class:selected={p.hours === plan} onclick={() => setPlan(p.hours)}>
@@ -290,15 +286,6 @@
     margin-top: 2px;
     font-size: 0.6875rem;
     color: var(--text-muted);
-  }
-  .explain {
-    margin: -2px 4px 10px;
-    font-size: 0.875rem;
-    line-height: 1.5;
-    color: var(--text-muted);
-  }
-  .explain strong {
-    color: var(--text);
   }
   .plan.selected {
     border-color: var(--accent);

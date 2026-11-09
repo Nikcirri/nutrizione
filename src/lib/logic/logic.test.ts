@@ -320,10 +320,11 @@ describe('aggiornamenti', () => {
     expect(r).toEqual({ version: '0.2.0', apkUrl: 'https://apk', pageUrl: 'https://x', notes: ['Uno', 'Due'] });
     expect(releaseNotes('niente')).toEqual([]);
   });
-  it('controllo automatico una volta al giorno', () => {
+  it('controllo automatico al massimo ogni 10 minuti', () => {
     const now = new Date('2026-11-09T12:00:00Z');
     expect(shouldAutoCheck(null, now)).toBe(true);
-    expect(shouldAutoCheck('2026-11-09T06:00:00Z', now)).toBe(false);
-    expect(shouldAutoCheck('2026-11-08T06:00:00Z', now)).toBe(true);
+    expect(shouldAutoCheck('2026-11-09T11:55:00Z', now)).toBe(false);
+    expect(shouldAutoCheck('2026-11-09T11:45:00Z', now)).toBe(true);
+    expect(shouldAutoCheck('rotto', now)).toBe(true);
   });
 });

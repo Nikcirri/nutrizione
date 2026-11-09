@@ -52,6 +52,8 @@ describe('AI: risposta', () => {
 
   it('forma delle chiavi', () => {
     expect(looksLikeGeminiKey('AIzaSyD-abcdefghijklmnopqrstuvwxyz012345')).toBe(true);
+    expect(looksLikeGeminiKey('AQ.Ab8RN6Jxl6OdplEKqxwlbG2IZ7PNmYabcdefghijkl')).toBe(true);
     expect(looksLikeGeminiKey('sk-123')).toBe(false);
+    expect(looksLikeGeminiKey('projects/355147696887')).toBe(false);
   });
 });

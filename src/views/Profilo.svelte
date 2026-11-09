@@ -12,7 +12,7 @@
   import { db } from '../lib/db';
   import { getAiKey, setAiKey } from '../lib/repo';
   import AiKeyForm from '../lib/ui/AiKeyForm.svelte';
-  import { checkForUpdates } from '../lib/services/updates';
+  import { checkUpdateNow, installUpdate } from '../lib/state/update.svelte';
   import { app, currentTargets, initApp, sheets, updateSettings, weightForCalc } from '../lib/state/app.svelte';
   import { confirmDialog, showToast, withBusy } from '../lib/state/ui.svelte';
   import type { Settings } from '../lib/types';
@@ -104,14 +104,14 @@
   async function checkUpdates() {
     checking = true;
     try {
-      const r = await checkForUpdates((s) => set((st) => (st.updates = s)));
+      const r = await checkUpdateNow();
       if (r.kind === 'available') {
         const ok = await confirmDialog({
           title: `Nuova versione ${r.release.version}`,
           message: r.release.notes.length ? r.release.notes.map((n) => `• ${n}`).join('\n') : 'È disponibile un aggiornamento.',
-          confirmLabel: 'Scarica',
+          confirmLabel: 'Aggiorna',
         });
-        if (ok) openExternal(r.release.apkUrl ?? r.release.pageUrl);
+        if (ok) await installUpdate();
       } else if (r.kind === 'current') {
         showToast('Hai già l’ultima versione.');
       } else if (r.kind === 'offline') {

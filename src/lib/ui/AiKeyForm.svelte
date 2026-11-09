@@ -41,14 +41,14 @@
   <p class="lead">Per stimare i piatti dalla foto l’app usa <strong>Google Gemini</strong>. Serve una chiave gratuita, una volta sola:</p>
   <ol>
     <li>Apri <button class="link" onclick={() => openExternal(KEY_PAGE)}>aistudio.google.com/apikey</button> e accedi con il tuo account Google.</li>
-    <li>Tocca <strong>Create API key</strong> (o “Crea chiave API”) e poi copia la chiave.</li>
+    <li>Tocca <strong>Create API key</strong> (o “Crea chiave API”), poi copia la <strong>Chiave API</strong> con l’icona accanto: inizia con <strong>AQ.</strong> (o con AIza se è vecchia).</li>
     <li>Torna qui e incollala sotto.</li>
   </ol>
   <label class="field">
     <span>Chiave di Gemini</span>
-    <input class="input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIza…" bind:value={key} />
+    <input class="input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AQ.…" bind:value={key} />
   </label>
-  {#if key.trim() && !shapeOk}<p class="note">Di solito la chiave inizia con “AIza” ed è lunga circa 39 caratteri.</p>{/if}
+  {#if key.trim() && !shapeOk}<p class="note">La chiave di solito inizia con “AQ.” (o “AIza”): controlla di aver copiato la Chiave API e non il nome o il numero del progetto.</p>{/if}
   <button class="btn btn-primary btn-block" disabled={!key.trim() || checking} onclick={save}>{checking ? 'Controllo…' : 'Salva la chiave'}</button>
   <p class="note">
     La chiave resta solo su questo telefono (non va nei backup). Con il piano gratuito Google può usare foto e descrizioni per migliorare i suoi

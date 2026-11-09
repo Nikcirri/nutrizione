@@ -40,7 +40,7 @@ export async function checkForUpdates(save: (s: UpdateState) => void, now: Date 
   return isNewer(release.version, APP_VERSION) ? { kind: 'available', release } : { kind: 'current', release };
 }
 
-/** Controllo silenzioso all'avvio: al massimo una volta al giorno. */
+/** Controllo silenzioso (all'apertura e al ritorno nell'app): al massimo ogni 10 minuti. */
 export async function autoCheckForUpdates(state: UpdateState, save: (s: UpdateState) => void): Promise<ReleaseInfo | null> {
   const now = new Date();
   if (!shouldAutoCheck(state.lastCheck, now)) {

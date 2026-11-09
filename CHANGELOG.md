@@ -1,5 +1,11 @@
 # Novità
 
+## [0.3.0] - 2026-11-09
+
+- Aggiornamenti dentro l'app: quando esce una versione nuova compare l'avviso anche ad app aperta, e con "Aggiorna" si scarica e si installa senza passare dal browser.
+- Foto AI: accettate le chiavi nuove di Gemini, quelle che iniziano con "AQ.".
+- Digiuno: tolta la spiegazione sopra i piani.
+
 ## [0.2.0] - 2026-11-09
 
 - Foto AI: fotografa il piatto, aggiungi una descrizione e Google Gemini stima ingredienti, grammi e valori. Puoi correggere i grammi prima di aggiungerli al diario.

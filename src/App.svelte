@@ -2,11 +2,10 @@
   import { onMount } from 'svelte';
   import { reportError } from './lib/errors';
   import { syncHealthDay } from './lib/healthSync';
-  import type { ReleaseInfo } from './lib/logic/updates';
   import { mealForHour } from './lib/logic/dates';
-  import { onBackButton, onResume, openExternal, tapFeedback } from './lib/platform';
-  import { autoCheckForUpdates } from './lib/services/updates';
-  import { app, initApp, sheets, tickToday, updateSettings, type Tab } from './lib/state/app.svelte';
+  import { onBackButton, onResume, tapFeedback } from './lib/platform';
+  import { app, initApp, sheets, tickToday, type Tab } from './lib/state/app.svelte';
+  import { announceNewVersion, installUpdate, refreshUpdate, resumeUpdate, update } from './lib/state/update.svelte';
   import { closeTopOverlay } from './lib/state/ui.svelte';
   import BusyOverlay from './lib/ui/BusyOverlay.svelte';
   import DialogHost from './lib/ui/DialogHost.svelte';
@@ -33,8 +32,6 @@
     { id: 'profilo', label: 'Profilo', icon: 'user' },
   ];
 
-  let update = $state<ReleaseInfo | null>(null);
-  let updateDismissed = $state(false);
   let main = $state<HTMLElement | null>(null);
 
   function selectTab(tab: Tab) {
@@ -58,12 +55,8 @@
   onMount(() => {
     initApp()
       .then(async () => {
-        if (!app.settings.onboarded) return;
-        update = await autoCheckForUpdates(app.settings.updates, (s) => {
-          void updateSettings((st) => {
-            st.updates = s;
-          });
-        }).catch(() => null);
+        await announceNewVersion().catch(() => undefined);
+        if (app.settings.onboarded) await refreshUpdate();
       })
       .catch((e: unknown) => reportError(e, 'Non riesco a leggere i dati dell’app.'));
 
@@ -81,6 +74,8 @@
     });
     onResume(() => {
       tickToday();
+      void resumeUpdate();
+      if (app.settings.onboarded) void refreshUpdate();
       if (app.settings.prefs.healthConnected) {
         syncHealthDay(app.date)
           .then(() => app.healthTick++)
@@ -99,18 +94,36 @@
 {:else}
   <div class="shell">
     <main bind:this={main}>
-      {#if update && !updateDismissed}
-        <div class="update card">
-          <div class="grow">
-            <strong>Nuova versione {update.version}</strong>
-            <span>Scaricala e installala sopra quella attuale: i dati restano.</span>
-          </div>
-          <div class="update-actions">
-            <button class="btn btn-ghost btn-small" onclick={() => (updateDismissed = true)}>Dopo</button>
-            <button class="btn btn-primary btn-small" onclick={() => update && openExternal(update.apkUrl ?? update.pageUrl)}>
-              Scarica
-            </button>
-          </div>
+      {#if update.available && (!update.dismissed || update.phase !== 'idle')}
+        <div class="update card" role="status">
+          {#if update.phase === 'download'}
+            <strong>Scarico la versione {update.available.version}… {update.percent}%</strong>
+            <div class="progress"><div style:width="{update.percent}%"></div></div>
+            <span>Puoi continuare a usare l’app intanto.</span>
+          {:else if update.phase === 'install'}
+            <strong>Quasi fatto</strong>
+            <span>Tocca <b>Aggiorna</b> (o <b>Installa</b>) nella finestra di Android. Poi tocca <b>Apri</b>: i tuoi dati restano.</span>
+            <div class="update-actions">
+              <button class="btn btn-ghost btn-small" onclick={() => installUpdate()}>Riprova</button>
+            </div>
+          {:else if update.phase === 'permission'}
+            <strong>Dai il permesso e torna qui</strong>
+            <span>Attiva <b>Consenti da questa origine</b>, poi torna indietro: l’aggiornamento parte da solo.</span>
+          {:else}
+            <div class="grow">
+              <strong>Nuova versione {update.available.version}</strong>
+              <span>Si installa sopra quella attuale: i dati restano.</span>
+              {#if update.available.notes.length}
+                <ul>
+                  {#each update.available.notes.slice(0, 3) as n (n)}<li>{n}</li>{/each}
+                </ul>
+              {/if}
+            </div>
+            <div class="update-actions">
+              <button class="btn btn-ghost btn-small" onclick={() => (update.dismissed = true)}>Dopo</button>
+              <button class="btn btn-primary btn-small" onclick={() => installUpdate()}>Aggiorna</button>
+            </div>
+          {/if}
         </div>
       {/if}
       {#if app.tab === 'oggi'}
@@ -191,6 +204,24 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+  }
+  .update ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .progress {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--surface-2);
+    overflow: hidden;
+  }
+  .progress div {
+    height: 100%;
+    background: var(--accent);
+    transition: width 200ms ease;
   }
   .navbar {
     flex: none;

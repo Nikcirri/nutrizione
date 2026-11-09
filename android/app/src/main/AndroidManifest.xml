@@ -44,6 +44,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Aggiornamento dentro l'app: apre l'installazione della nuova versione scaricata da GitHub. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Health Connect: l'app legge solo passi, calorie, distanza e allenamenti (niente scritture).
          Il plugin ne dichiara molti di più: qui si tolgono quelli che non servono. -->

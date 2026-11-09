@@ -151,7 +151,7 @@ export function geminiProblem(status: number, json: unknown): GeminiProblem {
 export function problemMessage(p: GeminiProblem): string {
   switch (p) {
     case 'key':
-      return 'La chiave di Gemini non è valida. Controllala nel Profilo (deve iniziare con “AIza”).';
+      return 'Gemini non accetta la chiave. Ricopiala tutta da aistudio.google.com/apikey e incollala di nuovo nel Profilo.';
     case 'quota':
       return 'Hai raggiunto il limite gratuito di Gemini per adesso. Riprova tra qualche minuto o domani.';
     case 'region':
@@ -165,7 +165,8 @@ export function problemMessage(p: GeminiProblem): string {
   }
 }
 
-/** Le chiavi di Google AI Studio iniziano con "AIza". */
+/** Le chiavi di Google AI Studio iniziano con "AQ." (nuove, da maggio 2026) o "AIza" (vecchie). */
 export function looksLikeGeminiKey(key: string): boolean {
-  return /^AIza[0-9A-Za-z_-]{30,}$/.test(key.trim());
+  const k = key.trim();
+  return /^AIza[0-9A-Za-z_-]{30,}$/.test(k) || /^AQ\.[0-9A-Za-z_.-]{20,}$/.test(k);
 }
