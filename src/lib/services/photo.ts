@@ -1,9 +1,13 @@
-// Foto del piatto: fotocamera o galleria, poi rimpicciolita (max 768 px) per mandarla velocemente all'AI.
+// Foto del piatto: fotocamera o galleria, poi rimpicciolita (max 1024 px) per mandarla all'AI.
 import { Camera, CameraDirection, MediaTypeSelection } from '@capacitor/camera';
+import { UserError } from '../errors';
+import { looksBlank } from '../logic/ai';
 import { isNative } from '../platform';
 
-/** Per riconoscere il cibo basta: una foto più piccola parte e viene analizzata prima. */
-const MAX_SIDE = 768;
+/** Abbastanza dettaglio per riconoscere anche piatti con tanti ingredienti, senza rallentare l'invio. */
+const MAX_SIDE = 1024;
+/** La fotocamera consegna già una foto non enorme: meno memoria e meno attesa sul telefono. */
+const CAMERA_SIDE = 1600;
 
 function isCancel(e: unknown): boolean {
   const text = `${(e as { code?: string })?.code ?? ''} ${(e as Error)?.message ?? e}`;
@@ -43,6 +47,8 @@ export async function takeMealPhoto(): Promise<Blob | null> {
   try {
     const res = await Camera.takePhoto({
       quality: 85,
+      targetWidth: CAMERA_SIDE,
+      targetHeight: CAMERA_SIDE,
       correctOrientation: true,
       cameraDirection: CameraDirection.Rear,
       editable: 'no',
@@ -65,6 +71,8 @@ export async function chooseMealPhoto(): Promise<Blob | null> {
       limit: 1,
       correctOrientation: true,
       quality: 85,
+      targetWidth: CAMERA_SIDE,
+      targetHeight: CAMERA_SIDE,
     });
     const path = res.results[0]?.webPath;
     return path ? await webPathToBlob(path) : null;
@@ -80,10 +88,24 @@ export interface PreparedImage {
   dataUrl: string;
 }
 
-/** Rimpicciolisce la foto e la trasforma in JPEG (base64). */
+/** Vero se la foto è tutta nera o di un colore solo (controllo su una copia di 24×24 pixel). */
+function isBlank(bitmap: ImageBitmap): boolean {
+  const c = document.createElement('canvas');
+  c.width = 24;
+  c.height = 24;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return false;
+  ctx.drawImage(bitmap, 0, 0, 24, 24);
+  return looksBlank(ctx.getImageData(0, 0, 24, 24).data);
+}
+
+/** Rimpicciolisce la foto e la trasforma in JPEG (base64). Rifiuta le foto venute nere o vuote. */
 export async function prepareImage(blob: Blob): Promise<PreparedImage> {
   const bitmap = await createImageBitmap(blob);
   try {
+    if (isBlank(bitmap)) {
+      throw new UserError('La foto è venuta nera o vuota. Riprova con più luce, oppure scrivi cosa hai mangiato.');
+    }
     const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
     const w = Math.max(1, Math.round(bitmap.width * scale));
     const h = Math.max(1, Math.round(bitmap.height * scale));
@@ -93,7 +115,7 @@ export async function prepareImage(blob: Blob): Promise<PreparedImage> {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas non disponibile');
     ctx.drawImage(bitmap, 0, 0, w, h);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
     return { dataUrl, mime: 'image/jpeg', base64: dataUrl.slice(dataUrl.indexOf(',') + 1) };
   } finally {
     bitmap.close();

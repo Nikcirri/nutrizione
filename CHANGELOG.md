@@ -1,5 +1,14 @@
 # Novità
 
+## [0.5.2] - 2026-11-10
+
+- Foto AI: dopo lo scatto hai il tempo di scrivere cosa c'è nel piatto, poi tocchi Calcola.
+- Foto AI più affidabile: usa sempre il modello migliore e, se non riconosce il piatto, prova il successivo.
+- Grafico: il numero della colonna non copre più la scritta dell'obiettivo.
+- Quello che scrivi conta sempre, anche se la foto non si capisce (basta "salame").
+- Foto più nitide; se la foto viene nera l'app lo dice subito.
+- Se qualcosa non va, sotto l'errore compare una riga di dettagli da mandarmi.
+
 ## [0.5.1] - 2026-11-09
 
 - Il + apre di nuovo il menu per aggiungere, anche in modalità semplice.

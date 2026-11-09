@@ -10,13 +10,26 @@ import {
   geminiText,
   itemPer100,
   looksLikeGeminiKey,
-  modelOrder,
+  looksBlank,
+  MEAL_SCHEMA,
+  modelLabel,
+  modelsToTry,
+  msToPacificMidnight,
+  pauseUntil,
+  describeAttempts,
   parseAiMeal,
   scaleItem,
   waitingMessage,
 } from './ai';
 
 describe('AI: richiesta', () => {
+  it('la descrizione vince sulla foto, e senza descrizione si stima anche con foto scure', () => {
+    expect(buildPrompt('salame', true)).toContain('anche se la foto è scura, sfocata o non si capisce, stima sempre il cibo descritto');
+    const photoOnly = buildPrompt('', true);
+    expect(photoOnly).toContain('stima comunque il cibo più probabile');
+    expect(photoOnly).not.toContain('stima sempre il cibo descritto');
+    expect(buildPrompt('salame', false)).toContain('solo se la descrizione non parla di cibo');
+  });
   it('include la descrizione solo se c’è', () => {
     expect(buildPrompt('  pasta al pesto  ', true)).toContain('"""pasta al pesto"""');
     expect(buildPrompt('', true)).not.toContain('Descrizione');
@@ -74,11 +87,56 @@ describe('AI: risposta', () => {
 });
 
 describe('AI: velocità', () => {
-  it('prova per primo il modello che ha funzionato', () => {
+  it('usa sempre il modello migliore disponibile, saltando quelli in pausa', () => {
     const models = ['a', 'b', 'c'];
-    expect(modelOrder(models, 'c')).toEqual(['c', 'a', 'b']);
-    expect(modelOrder(models, '')).toEqual(['a', 'b', 'c']);
-    expect(modelOrder(models, 'vecchio')).toEqual(['a', 'b', 'c']);
+    const now = 1_000_000;
+    expect(modelsToTry(models, {}, now)).toEqual(['a', 'b', 'c']);
+    expect(modelsToTry(models, { a: now + 5000 }, now)).toEqual(['b', 'c']);
+    // La pausa finita non conta più: il migliore torna primo.
+    expect(modelsToTry(models, { a: now - 1 }, now)).toEqual(['a', 'b', 'c']);
+    // Tutti in pausa: si provano comunque.
+    expect(modelsToTry(models, { a: now + 1, b: now + 1, c: now + 1 }, now)).toEqual(['a', 'b', 'c']);
+  });
+  it('pausa giusta dopo un errore', () => {
+    const now = Date.UTC(2026, 10, 10, 20, 0, 0); // 12:00 a Los Angeles
+    const day = { error: { code: 429, details: [{ '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }] } };
+    expect(pauseUntil(429, day, now)).toBe(now + 12 * 3600_000 + 60_000);
+    const minute = { error: { code: 429, details: [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '42s' }] } };
+    expect(pauseUntil(429, minute, now)).toBe(now + 42_000);
+    expect(pauseUntil(429, { error: { code: 429 } }, now)).toBe(now + 60_000);
+    expect(pauseUntil(404, { error: { code: 404 } }, now)).toBe(now + 7 * 24 * 3600_000);
+    expect(pauseUntil(400, { error: { code: 400, message: 'bad' } }, now)).toBeNull();
+  });
+  it('mezzanotte di Los Angeles', () => {
+    expect(msToPacificMidnight(Date.UTC(2026, 10, 10, 7, 59, 0))).toBe(2 * 60_000); // 23:59 a LA: 1 minuto + 1 di margine
+    expect(msToPacificMidnight(Date.UTC(2026, 6, 10, 7, 0, 0))).toBe(24 * 3600_000 + 60_000); // 00:00 in estate (UTC-7)
+  });
+  it('nomi dei modelli e riepilogo dei tentativi', () => {
+    expect(modelLabel('gemini-3.5-flash-lite')).toBe('3.5 Flash-Lite');
+    expect(modelLabel('gemini-3.8-flash')).toBe('3.8 Flash');
+    expect(
+      describeAttempts([
+        { model: 'gemini-3.8-flash', outcome: 'quota' },
+        { model: 'gemini-3.5-flash-lite', outcome: 'empty' },
+      ]),
+    ).toBe('3.8 Flash: limite gratuito raggiunto · 3.5 Flash-Lite: nessun cibo riconosciuto');
+  });
+  it('riconosce le foto nere o vuote', () => {
+    const fill = (f: (i: number) => [number, number, number]) => {
+      const a = new Uint8ClampedArray(24 * 24 * 4);
+      for (let i = 0; i < 24 * 24; i++) a.set([...f(i), 255], i * 4);
+      return a;
+    };
+    expect(looksBlank(fill(() => [0, 0, 0]))).toBe(true);
+    expect(looksBlank(fill(() => [200, 200, 200]))).toBe(true);
+    expect(looksBlank(fill((i) => (i % 2 ? [3, 3, 3] : [6, 5, 4])))).toBe(true);
+    // Foto vera, anche se scura: c'è variazione.
+    expect(looksBlank(fill((i) => [(i * 7) % 60, (i * 3) % 40, (i * 5) % 30]))).toBe(false);
+    expect(looksBlank(fill((i) => (i % 3 ? [180, 120, 60] : [40, 90, 30])))).toBe(false);
+  });
+  it('lo schema chiede tutti i campi che l’app legge', () => {
+    expect(MEAL_SCHEMA.required).toEqual(['dish', 'portion', 'confidence', 'items', 'why', 'note', 'questions']);
+    expect(MEAL_SCHEMA.properties.items.items.required).toContain('grams');
   });
   it('messaggi durante l’attesa', () => {
     expect(waitingMessage(1, true)).toBe('Invio la foto…');

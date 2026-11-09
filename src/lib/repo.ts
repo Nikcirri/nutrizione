@@ -4,7 +4,7 @@ import type { BackupData } from './logic/backup';
 import { addDays } from './logic/dates';
 import { sanitizeSettings } from './logic/settings';
 import type { Activity, DiaryEntry, Dish, Fast, Food, HealthDay, MealId, Settings, WeightEntry } from './types';
-import { NO_HABITS, type AiHabits } from './logic/ai';
+import { NO_HABITS, type AiHabits, type ModelPauses } from './logic/ai';
 import { normalize } from './logic/search';
 
 // ---------- Impostazioni ----------
@@ -35,13 +35,16 @@ export async function setAiKey(db: NutriDB, key: string): Promise<void> {
 }
 
 /** Ultimo modello di Gemini che ha funzionato: la volta dopo si prova per primo (risposta più veloce). */
-export async function getAiModel(db: NutriDB): Promise<string> {
-  const row = await db.kv.get('aiModel');
-  return typeof row?.value === 'string' ? row.value : '';
+/** Modelli di Gemini messi in pausa (limite gratuito raggiunto o modello inesistente) e fino a quando. */
+export async function getModelPauses(db: NutriDB): Promise<ModelPauses> {
+  const row = await db.kv.get('aiModelPauses');
+  const v = row?.value;
+  if (typeof v !== 'object' || v === null) return {};
+  return Object.fromEntries(Object.entries(v as Record<string, unknown>).filter((e): e is [string, number] => typeof e[1] === 'number'));
 }
 
-export async function setAiModel(db: NutriDB, model: string): Promise<void> {
-  await db.kv.put({ key: 'aiModel', value: model });
+export async function setModelPauses(db: NutriDB, pauses: ModelPauses): Promise<void> {
+  await db.kv.put({ key: 'aiModelPauses', value: pauses });
 }
 
 /** Abitudini imparate dalle correzioni alle stime dell'AI. */

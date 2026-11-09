@@ -6,6 +6,7 @@
     habitsHints,
     isDressing,
     itemPer100,
+    modelLabel,
     scaleItem,
     SUSPICIOUS_KCAL,
     waitingMessage,
@@ -18,7 +19,7 @@
   import { mealVerdict } from '../../lib/logic/simple';
   import { tapFeedback } from '../../lib/platform';
   import { addEntry, addHabit, findDish, getAiKey, getHabits, saveDish, topDishes } from '../../lib/repo';
-  import { analyzeMeal } from '../../lib/services/gemini';
+  import { AiError, analyzeMeal } from '../../lib/services/gemini';
   import { chooseMealPhoto, prepareImage, takeMealPhoto, type PreparedImage } from '../../lib/services/photo';
   import { app, currentTargets, sheets } from '../../lib/state/app.svelte';
   import { showToast, showUndoToast } from '../../lib/state/ui.svelte';
@@ -46,7 +47,11 @@
   let busy = $state(false);
   let seconds = $state(0);
   let error = $state('');
+  /** Riga tecnica su cosa è successo con i modelli (utile per capire i problemi). */
+  let errorDetail = $state('');
   let result = $state<AiMeal | null>(null);
+  /** Il modello di Gemini che ha fatto la stima. */
+  let usedModel = $state('');
   let rows = $state<Row[]>([]);
   let answers = $state<Record<number, number>>({});
   let details = $state(false);
@@ -113,8 +118,7 @@
       if (!blob) return;
       image = await prepareImage(blob);
       reset();
-      // Scattata la foto, l'analisi parte da sola.
-      await analyze();
+      // La stima non parte da sola: c'è il tempo di scrivere cosa c'è nel piatto, poi si tocca "Calcola".
     } catch (e) {
       reportError(e, 'Non riesco ad aprire la foto.');
     }
@@ -126,6 +130,7 @@
     answers = {};
     known = null;
     error = '';
+    errorDetail = '';
   }
 
   async function analyze(extra = '') {
@@ -133,25 +138,37 @@
     if (!image && description.trim().length < 3 && !extra) return;
     busy = true;
     error = '';
+    errorDetail = '';
     seconds = 0;
     const started = Date.now();
     const timer = setInterval(() => (seconds = Math.floor((Date.now() - started) / 1000)), 500);
     try {
       const [habits, top] = await Promise.all([getHabits(db), topDishes(db, 15)]);
       const desc = [description.trim(), extra ? `Aggiunta dell’utente: ${extra}` : ''].filter(Boolean).join('\n');
-      const r = await analyzeMeal(key, desc, image ? { base64: image.base64, mime: image.mime } : null, {
+      const { meal: r, model, detail } = await analyzeMeal(key, desc, image ? { base64: image.base64, mime: image.mime } : null, {
         habits: habitsHints(habits),
         knownDishes: top.map((d) => d.name),
       });
+      if (!r.items.length) {
+        // Niente riconosciuto: si resta dove si era (foto e testo restano) e si spiega cosa fare.
+        error = extra
+          ? 'Non ho capito cosa aggiungere. Prova a scriverlo con altre parole.'
+          : image
+            ? 'Non riesco a riconoscere il cibo in questa foto. Scrivi qui sopra cosa c’è nel piatto (anche solo “salame”) e tocca di nuovo Calcola.'
+            : 'Non ho capito cosa hai mangiato. Prova a scriverlo con altre parole.';
+        errorDetail = detail;
+        return;
+      }
       result = r;
+      usedModel = model;
       rows = r.items.map((i) => ({ base: i, grams: String(i.grams), include: true }));
       answers = Object.fromEntries(r.questions.map((_, i) => [i, 0]));
       known = r.items.length ? ((await findDish(db, r.dish)) ?? null) : null;
       details = !simple;
-      if (!r.items.length) error = 'Non ho riconosciuto cibo. Prova con un’altra foto o scrivi cosa hai mangiato.';
       void tapFeedback();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
+      errorDetail = e instanceof AiError ? e.detail : '';
     } finally {
       clearInterval(timer);
       busy = false;
@@ -320,9 +337,17 @@
       </button>
     </div>
 
+    {#if image && !busy && !error}
+      <p class="ready">Foto pronta. Se vuoi, scrivi qui sotto cosa c’è nel piatto (aiuta molto), poi tocca <strong>Calcola con l’AI</strong>.</p>
+    {/if}
     <label class="field desc">
-      <span>Oppure scrivilo (o dettalo con il microfono della tastiera)</span>
-      <textarea class="input" rows="2" bind:value={description} placeholder="Es. pasta al pomodoro e un’insalata, poi una mela"></textarea>
+      <span>{image ? 'Cosa c’è nel piatto? (facoltativo)' : 'Oppure scrivilo (o dettalo con il microfono della tastiera)'}</span>
+      <textarea
+        class="input"
+        rows="2"
+        bind:value={description}
+        placeholder={image ? 'Es. salsiccia con fagioli e pane con patè' : 'Es. pasta al pomodoro e un’insalata, poi una mela'}
+      ></textarea>
     </label>
     <button class="btn btn-ink btn-block analyze" disabled={busy || (!image && description.trim().length < 3)} onclick={() => analyze()}>
       {#if busy}<span class="spinner" aria-hidden="true"></span> {waitingMessage(seconds, image !== null)} <span class="secs num">{seconds}s</span>{:else}<Icon
@@ -331,6 +356,7 @@
         /> Calcola con l’AI{/if}
     </button>
     {#if error}<p class="error">{error}</p>{/if}
+    {#if errorDetail}<p class="error-detail">Dettagli: {errorDetail}</p>{/if}
 
     {#if dishes.length && !busy}
       <h4 class="section-title">I tuoi piatti · un tocco e li aggiungi</h4>
@@ -403,6 +429,7 @@
     {/if}
     {#if busy}<p class="note">{waitingMessage(seconds, image !== null)} {seconds}s</p>{/if}
     {#if error}<p class="error">{error}</p>{/if}
+    {#if errorDetail}<p class="error-detail">Dettagli: {errorDetail}</p>{/if}
 
     <button class="details-toggle" onclick={() => (details = !details)}>
       <Icon name={details ? 'chevronDown' : 'chevronRight'} size={18} />
@@ -428,6 +455,7 @@
         {/each}
       </div>
       {#if result.note}<p class="note">{result.note}</p>{/if}
+      {#if usedModel}<p class="note small">Stima di Gemini {modelLabel(usedModel)}</p>{/if}
     {/if}
 
     <h4 class="section-title">Pasto</h4>
@@ -532,6 +560,21 @@
     color: var(--danger);
     font-size: 0.875rem;
     line-height: 1.5;
+  }
+  .error-detail {
+    margin: 4px 4px 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+  .ready {
+    margin: 10px 4px 0;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+  .note.small {
+    font-size: 0.75rem;
   }
   .dishes {
     display: flex;

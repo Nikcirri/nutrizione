@@ -59,14 +59,19 @@ export function buildPrompt(description: string, hasPhoto: boolean, context: Pro
       : 'Non c’è una foto: se la descrizione non dice le quantità, usa porzioni medie italiane.',
     'Dividi il piatto nei suoi ingredienti principali (massimo 10), compresi olio, burro, condimenti e salse che si vedono o che la ricetta usa normalmente.',
     'Per ogni ingrediente dai i grammi presenti nel piatto e i valori per QUELLA quantità (non per 100 g): kcal, carboidrati, proteine, grassi e fibre in grammi.',
-    'Scrivi i nomi in italiano. Se nella foto non c’è cibo, restituisci "items": [].',
+    'Scrivi i nomi in italiano.',
+    hasPhoto && desc
+      ? 'La descrizione dell’utente ha la precedenza: anche se la foto è scura, sfocata o non si capisce, stima sempre il cibo descritto.'
+      : hasPhoto
+        ? 'Se la foto è scura o sfocata, stima comunque il cibo più probabile con "confidence": "bassa". Restituisci "items": [] solo se nella foto non c’è proprio niente da mangiare o da bere.'
+        : 'Restituisci "items": [] solo se la descrizione non parla di cibo o bevande.',
     'L’utente non conosce i valori nutrizionali: in "why" spiega in una frase semplice da dove arriva la maggior parte delle calorie (es. "Quasi metà arriva dall’olio e dal formaggio").',
     'In "portion" di’ se la porzione è piccola, normale o abbondante rispetto a una porzione italiana normale.',
-    'Fai al massimo 2 domande, SOLO su cose che non si vedono e che cambiano molto le calorie (es. fritto o al forno, caffè zuccherato o no, condimento con panna o no). Ogni domanda ha 2 o 3 risposte brevi: la prima è quella che hai già usato nella stima (factor 1, add null); per le altre indica "factor" (per quanto moltiplicare tutte le calorie del piatto) oppure "add" (un ingrediente da aggiungere, con grammi e valori). Se non serve nessuna domanda: "questions": [].',
+    'Fai al massimo 2 domande, SOLO su cose che non si vedono e che cambiano molto le calorie (es. fritto o al forno, caffè zuccherato o no, condimento con panna o no). Ogni domanda ha 2 o 3 risposte brevi: la prima è quella che hai già usato nella stima (factor 1, senza "add"); per le altre indica "factor" (per quanto moltiplicare tutte le calorie del piatto) oppure "add" (un ingrediente da aggiungere, con grammi e valori). Se non serve nessuna domanda: "questions": [].',
     habits.length ? `Abitudini di questo utente: ${habits.join(' ')}` : '',
     dishes.length ? `Piatti che l’utente mangia spesso (se il piatto è uno di questi, usa esattamente lo stesso nome): ${dishes.join('; ')}.` : '',
     'Rispondi SOLO con JSON valido, senza testo prima o dopo, con questa forma esatta:',
-    '{"dish":"nome del piatto","portion":"piccola|normale|abbondante","confidence":"alta|media|bassa","why":"…","note":"una frase breve su cosa è incerto","items":[{"name":"...","grams":0,"kcal":0,"carbs":0,"protein":0,"fat":0,"fiber":0}],"questions":[{"question":"...","options":[{"label":"...","factor":1,"add":null}]}]}',
+    '{"dish":"nome del piatto","portion":"piccola|normale|abbondante","confidence":"alta|media|bassa","items":[{"name":"...","grams":120,"kcal":0,"carbs":0,"protein":0,"fat":0,"fiber":0}],"why":"…","note":"una frase breve su cosa è incerto","questions":[{"question":"...","options":[{"label":"...","factor":1}]}]}',
     desc ? `Descrizione dell’utente: """${desc.slice(0, 600)}"""` : '',
   ]
     .filter(Boolean)
@@ -79,6 +84,48 @@ function num(v: unknown): number | null {
 }
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
+
+const NUMBER = { type: 'number' } as const;
+
+const ITEM_SCHEMA = {
+  type: 'object',
+  properties: { name: { type: 'string' }, grams: NUMBER, kcal: NUMBER, carbs: NUMBER, protein: NUMBER, fat: NUMBER, fiber: NUMBER },
+  required: ['name', 'grams', 'kcal', 'carbs', 'protein', 'fat', 'fiber'],
+} as const;
+
+/**
+ * Forma della risposta per gli "structured outputs" di Gemini: il modello è obbligato a rispondere
+ * con JSON valido e completo. Gli ingredienti vengono prima delle frasi.
+ */
+export const MEAL_SCHEMA = {
+  type: 'object',
+  properties: {
+    dish: { type: 'string' },
+    portion: { type: 'string', enum: ['piccola', 'normale', 'abbondante'] },
+    confidence: { type: 'string', enum: ['alta', 'media', 'bassa'] },
+    items: { type: 'array', items: ITEM_SCHEMA, maxItems: 12 },
+    why: { type: 'string' },
+    note: { type: 'string' },
+    questions: {
+      type: 'array',
+      maxItems: 2,
+      items: {
+        type: 'object',
+        properties: {
+          question: { type: 'string' },
+          options: {
+            type: 'array',
+            minItems: 2,
+            maxItems: 3,
+            items: { type: 'object', properties: { label: { type: 'string' }, factor: NUMBER, add: ITEM_SCHEMA }, required: ['label', 'factor'] },
+          },
+        },
+        required: ['question', 'options'],
+      },
+    },
+  },
+  required: ['dish', 'portion', 'confidence', 'items', 'why', 'note', 'questions'],
+} as const;
 
 /** Toglie eventuali ```json … ``` e testo attorno, e restituisce l'oggetto JSON. */
 export function extractJson(text: string): unknown {
@@ -220,8 +267,101 @@ export function itemPer100(item: AiItem): Nutrients {
 }
 
 /** Ordine dei modelli da provare: quello che ha funzionato l'ultima volta va per primo. */
-export function modelOrder(models: readonly string[], lastGood: string): string[] {
-  return models.includes(lastGood) ? [lastGood, ...models.filter((m) => m !== lastGood)] : [...models];
+/** Per ogni modello, fino a quando non usarlo (millisecondi), dopo un limite raggiunto o se non esiste. */
+export type ModelPauses = Record<string, number>;
+
+/**
+ * Modelli da provare adesso, sempre dal migliore: si saltano quelli in pausa.
+ * Se sono tutti in pausa si provano comunque, nello stesso ordine.
+ */
+export function modelsToTry(models: readonly string[], pauses: ModelPauses, now: number): string[] {
+  const ready = models.filter((m) => !((pauses[m] ?? 0) > now));
+  return ready.length ? ready : [...models];
+}
+
+const MINUTE = 60_000;
+const DAY = 24 * 60 * MINUTE;
+
+/** Millisecondi fino alla prossima mezzanotte di Los Angeles (quando Google azzera i limiti giornalieri). */
+export function msToPacificMidnight(now: number): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(now));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  const elapsed = ((get('hour') * 60 + get('minute')) * 60 + get('second')) * 1000;
+  return Math.max(MINUTE, DAY - elapsed + MINUTE);
+}
+
+/**
+ * Fino a quando mettere in pausa un modello dopo una risposta di errore (null = nessuna pausa).
+ * Limite giornaliero: fino alla mezzanotte di Los Angeles. Limite al minuto: il tempo indicato da Google
+ * (almeno 30 secondi). Modello inesistente: una settimana.
+ */
+export function pauseUntil(status: number, json: unknown, now: number): number | null {
+  const problem = geminiProblem(status, json);
+  if (problem === 'model') return now + 7 * DAY;
+  if (problem !== 'quota') return null;
+  const details = (json as { error?: { details?: Record<string, unknown>[] } })?.error?.details ?? [];
+  const text = JSON.stringify(details);
+  if (/PerDay/i.test(text)) return now + msToPacificMidnight(now);
+  const delay = details.map((d) => (typeof d.retryDelay === 'string' ? parseFloat(d.retryDelay) : NaN)).find((n) => Number.isFinite(n));
+  return now + Math.min(10 * MINUTE, Math.max(30_000, (delay ?? 60) * 1000));
+}
+
+/** Com'è andato un tentativo con un modello (per spiegare all'utente cosa non ha funzionato). */
+export type AttemptOutcome = 'ok' | 'empty' | 'unreadable' | 'quota' | 'model' | 'error';
+
+export interface AiAttempt {
+  model: string;
+  outcome: AttemptOutcome;
+}
+
+/** "gemini-3.5-flash-lite" → "3.5 Flash-Lite". */
+export function modelLabel(model: string): string {
+  return model
+    .replace(/^gemini-/, '')
+    .split('-')
+    .map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(' ')
+    .replace('Flash Lite', 'Flash-Lite');
+}
+
+const OUTCOME_TEXT: Record<AttemptOutcome, string> = {
+  ok: 'ok',
+  empty: 'nessun cibo riconosciuto',
+  unreadable: 'risposta non leggibile',
+  quota: 'limite gratuito raggiunto',
+  model: 'non disponibile',
+  error: 'errore',
+};
+
+/** Riga breve con i tentativi fatti, es. "3.8 Flash: limite gratuito raggiunto · 3.6 Flash: nessun cibo riconosciuto". */
+export function describeAttempts(attempts: AiAttempt[]): string {
+  return attempts.map((a) => `${modelLabel(a.model)}: ${OUTCOME_TEXT[a.outcome]}`).join(' · ');
+}
+
+/**
+ * Controllo veloce di una foto rimpicciolita (pixel RGBA): vero se è praticamente tutta nera
+ * o tutta di un colore, cioè se la fotocamera non ha dato un'immagine vera.
+ */
+export function looksBlank(rgba: ArrayLike<number>): boolean {
+  let n = 0;
+  let sum = 0;
+  let sumSq = 0;
+  for (let i = 0; i + 2 < rgba.length; i += 4) {
+    const y = 0.299 * rgba[i]! + 0.587 * rgba[i + 1]! + 0.114 * rgba[i + 2]!;
+    sum += y;
+    sumSq += y * y;
+    n++;
+  }
+  if (!n) return true;
+  const mean = sum / n;
+  const sd = Math.sqrt(Math.max(0, sumSq / n - mean * mean));
+  return sd < 2.5 || (mean < 10 && sd < 6);
 }
 
 /** Messaggio durante l'attesa, in base ai secondi passati. */

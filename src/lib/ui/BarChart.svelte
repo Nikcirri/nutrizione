@@ -43,6 +43,22 @@
   const labelWidth = $derived(Math.max(...items.map((i) => i.label.length), 1) * 7 + 8);
   const every = $derived(Math.max(1, Math.ceil(labelWidth / Math.max(1, band))));
   const showLabel = (i: number) => (items.length - 1 - i) % every === 0;
+
+  // Numero sopra la colonna scelta e scritta "obiettivo": non devono mai sovrapporsi.
+  // Se si toccano, la scritta dell'obiettivo passa sull'altro lato del grafico.
+  const valueText = $derived(sel && sel.value > 0 ? fmtInt(sel.value) : '');
+  const valueX = $derived(Math.min(width - 24, Math.max(24, band * selected + band / 2)));
+  const valueY = $derived(sel ? Math.max(14, y(sel.value) - 8) : 0);
+  const goalText = $derived(goal ? `obiettivo ${fmtInt(goal)}` : '');
+  const goalY = $derived(goal ? y(goal) - 5 : 0);
+  const goalW = $derived(goalText.length * 6.2);
+  const goalOnLeft = $derived.by(() => {
+    if (!valueText || !goalText) return false;
+    const vw = valueText.length * 7.6 + 6;
+    const vertical = valueY - 12 < goalY + 3 && goalY - 11 < valueY + 3;
+    const right = valueX + vw / 2 > width - 2 - goalW - 4;
+    return vertical && right;
+  });
 </script>
 
 <div class="chart" bind:clientWidth={width}>
@@ -50,7 +66,7 @@
     <line x1="0" x2={width} y1={PAD_TOP + plotH + 0.5} y2={PAD_TOP + plotH + 0.5} class="axis" />
     {#if goal}
       <line x1="0" x2={width} y1={y(goal)} y2={y(goal)} class="goal" />
-      <text x={width - 2} y={y(goal) - 5} text-anchor="end" class="goal-label">obiettivo {fmtInt(goal)}</text>
+      <text x={goalOnLeft ? 2 : width - 2} y={goalY} text-anchor={goalOnLeft ? 'start' : 'end'} class="goal-label">{goalText}</text>
     {/if}
     {#each items as it, i (it.key)}
       {@const x = band * i + band / 2}
@@ -71,14 +87,8 @@
         onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (selected = i)}
       />
     {/each}
-    {#if sel && sel.value > 0}
-      {@const x = band * selected + band / 2}
-      <text
-        x={Math.min(width - 24, Math.max(24, x))}
-        y={Math.max(14, y(sel.value) - 8)}
-        text-anchor="middle"
-        class="value">{fmtInt(sel.value)}</text
-      >
+    {#if valueText}
+      <text x={valueX} y={valueY} text-anchor="middle" class="value">{valueText}</text>
     {/if}
   </svg>
   {#if sel}
@@ -116,6 +126,10 @@
   .goal-label {
     fill: var(--text-muted);
     font-size: 11px;
+    paint-order: stroke;
+    stroke: var(--surface);
+    stroke-width: 4px;
+    stroke-linejoin: round;
   }
   .bar {
     fill: var(--chart);
@@ -134,6 +148,11 @@
   }
   .value {
     fill: var(--text);
+    /* Bordo del colore della scheda: la linea dell'obiettivo non taglia il numero. */
+    paint-order: stroke;
+    stroke: var(--surface);
+    stroke-width: 4px;
+    stroke-linejoin: round;
     font-size: 12px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
