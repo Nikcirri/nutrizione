@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icona della schermata di avvio (Android 12+): l'icona dell'app dentro un cerchio lime. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M18,54 a36,36 0 1,0 72,0 a36,36 0 1,0 -72,0 z" android:fillColor="#FFC6EC92" />
+    <path
+        android:pathData="M54,32 A22,22 0 1,1 33.33,46.48"
+        android:strokeColor="#FF1E3A10"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path android:pathData="M44,64 C44,52 51,44 64,44 C64,57 56,64 44,64 Z" android:fillColor="#FF3F8A1F" />
+    <path
+        android:pathData="M44,64 L57,51"
+        android:strokeColor="#FFC6EC92"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>

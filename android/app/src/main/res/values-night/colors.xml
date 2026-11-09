@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Avvio in tema scuro: lo stesso sfondo scuro dell'app -->
+    <color name="splash_background">#0D110D</color>
+</resources>

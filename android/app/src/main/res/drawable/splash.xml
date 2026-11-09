@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Schermata di avvio per Android 8-11: sfondo dell'app con l'icona al centro (vettori, niente PNG). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_background" />
+    <item
+        android:width="144dp"
+        android:height="144dp"
+        android:drawable="@drawable/splash_icon"
+        android:gravity="center" />
+</layer-list>
