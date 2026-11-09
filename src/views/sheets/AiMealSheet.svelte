@@ -27,7 +27,7 @@
   import Icon from '../../lib/ui/Icon.svelte';
   import Sheet from '../../lib/ui/Sheet.svelte';
 
-  let { request }: { request: { date: string; meal: MealId; autoCamera?: boolean } } = $props();
+  let { request }: { request: { date: string; meal: MealId } } = $props();
 
   interface Row {
     base: AiItem;
@@ -60,7 +60,6 @@
         const [k, d] = await Promise.all([getAiKey(db), topDishes(db, 8)]);
         key = k;
         dishes = d;
-        if (k && request.autoCamera) await pick('camera');
       } catch (e) {
         key = key ?? '';
         reportError(e);
@@ -93,12 +92,15 @@
   const why = $derived(result ? whyText(edited ? { why: '' } : result, chosen) : '');
   const portionText = $derived(result ? (edited ? 'quantità corrette da te' : `porzione ${result.portion}`) : '');
 
-  /** Passa alla ricerca normale: la data va letta prima di chiudere, perché chiudendo la richiesta sparisce. */
+  /**
+   * Torna alla ricerca (il foglio Aggiungi è sotto questo) con il pasto scelto e la ricerca pronta.
+   * La data va letta prima di chiudere: chiudendo, la richiesta di questo foglio sparisce.
+   */
   function openSearch() {
     const date = request.date;
     const m = meal;
     close();
-    sheets.addFood = { date, meal: m };
+    sheets.addFood = { date, meal: m, focusSearch: true };
   }
 
   function close() {

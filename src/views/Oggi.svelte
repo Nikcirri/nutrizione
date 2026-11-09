@@ -250,7 +250,7 @@
 {#if app.simpleIntro}
   <section class="card intro">
     <strong>Novità: modalità semplice</strong>
-    <p>Per chi non conosce i valori: porzioni a occhio, colori e consigli in parole al posto di grammi e numeri. E il + apre subito la fotocamera.</p>
+    <p>Per chi non conosce i valori: porzioni a occhio, colori e consigli in parole al posto di grammi e numeri.</p>
     <div class="intro-actions">
       <button class="btn btn-ghost btn-small" onclick={() => trySimple(false)}>No, grazie</button>
       <button class="btn btn-primary btn-small" onclick={() => trySimple(true)}>Provala</button>

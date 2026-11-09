@@ -132,6 +132,10 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "../out/Nutrizione-v${APP_VERSION_NAME}.apk"
           ls -la ../out
 
+      - name: Controlla permessi e dimensione dell'APK
+        if: env.SKIP != 'true'
+        run: bash scripts/check-apk.sh "out/Nutrizione-v${APP_VERSION_NAME}.apk"
+
       - name: Prepara le note della versione
         if: env.SKIP != 'true'
         run: |

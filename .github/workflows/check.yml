@@ -48,3 +48,6 @@ jobs:
             echo "::error title=Build Android fallita::$MSG"
             exit 1
           fi
+
+      - name: Controlla permessi e dimensione dell'APK
+        run: bash scripts/check-apk.sh "$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)"

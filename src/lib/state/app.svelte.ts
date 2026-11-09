@@ -88,8 +88,9 @@ export interface CreateFoodRequest {
 }
 
 export const sheets = $state({
-  addFood: null as { date: string; meal: MealId } | null,
-  aiMeal: null as { date: string; meal: MealId; autoCamera?: boolean } | null,
+  /** `focusSearch`: apre il foglio con la ricerca già pronta per scrivere. */
+  addFood: null as { date: string; meal: MealId; focusSearch?: boolean } | null,
+  aiMeal: null as { date: string; meal: MealId } | null,
   detail: null as DetailRequest | null,
   createFood: null as CreateFoodRequest | null,
   quickAdd: null as { date: string; meal: MealId; entry?: DiaryEntry } | null,

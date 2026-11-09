@@ -172,7 +172,7 @@
       {/if}
       <h3 class="ask">Conosci i valori nutrizionali?</h3>
       <button class="option" class:selected={simpleMode} onclick={() => (simpleMode = true)}>
-        <span class="grow"><strong>No, tienila semplice</strong><span>Porzioni a occhio, colori e consigli in parole. Il + apre subito la fotocamera.</span></span>
+        <span class="grow"><strong>No, tienila semplice</strong><span>Porzioni a occhio, colori e consigli in parole.</span></span>
         <span class="radio"><Icon name="check" size={16} /></span>
       </button>
       <button class="option" class:selected={!simpleMode} onclick={() => (simpleMode = false)}>

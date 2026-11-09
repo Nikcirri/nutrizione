@@ -17,7 +17,7 @@
   import Icon from '../../lib/ui/Icon.svelte';
   import Sheet from '../../lib/ui/Sheet.svelte';
 
-  let { request }: { request: { date: string; meal: MealId } } = $props();
+  let { request }: { request: { date: string; meal: MealId; focusSearch?: boolean } } = $props();
 
   type ListTab = 'recenti' | 'preferiti' | 'miei';
   let query = $state('');
@@ -42,6 +42,12 @@
   const local = $derived(trimmed ? searchFoods([saved.current, [...BASE_FOODS]], trimmed) : []);
   const looksLikeCode = $derived(isBarcode(trimmed));
   const mealLabel = $derived(MEALS.find((m) => m.id === request.meal)?.label ?? '');
+
+  let searchInput = $state<HTMLInputElement>();
+  // Arrivando da "Cerca un alimento" della Foto AI, il cursore è già nella ricerca.
+  $effect(() => {
+    if (request.focusSearch) searchInput?.focus();
+  });
 
   function close() {
     sheets.addFood = null;
@@ -137,6 +143,7 @@
       type="search"
       enterkeyhint="search"
       placeholder="Cerca un alimento o scrivi un codice"
+      bind:this={searchInput}
       bind:value={query}
       autocomplete="off"
     />

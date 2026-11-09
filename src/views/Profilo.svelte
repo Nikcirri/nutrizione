@@ -160,7 +160,7 @@
 <div class="list">
   <label class="switch-row">
     <span class="grow"
-      >Modalità semplice<span class="sub">Porzioni a occhio, colori e consigli in parole al posto di grammi e numeri. Il + apre subito la Foto AI.</span></span
+      >Modalità semplice<span class="sub">Porzioni a occhio, colori e consigli in parole al posto di grammi e numeri.</span></span
     >
     <input
       type="checkbox"
