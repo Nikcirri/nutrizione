@@ -5,7 +5,8 @@
   Rete solo per Open Food Facts (ricerca e codici a barre, via `CapacitorHttp` con User-Agent dell'app), per Google Gemini ("Foto AI", chiave personale dell'utente) e per il controllo aggiornamenti su GitHub.
 - Foto AI: `src/lib/services/gemini.ts` (modelli in ordine di preferenza, si passa al successivo se manca o ha finito il limite gratuito) e `src/lib/logic/ai.ts` (prompt e lettura della risposta, con test). La chiave sta in `kv` con nome `geminiKey`, fuori dalle impostazioni: non deve mai finire nei backup.
   L'AI risponde anche con porzione, frase "perché", e fino a 2 domande con risposte pronte. Le correzioni con i pulsanti si salvano come abitudini (`kv` `aiHabits`) e finiscono nel prompt; i piatti aggiunti vanno nella tabella `dishes` (schema `version(2)`), mostrati come "I tuoi piatti". Sopra 1500 kcal l'app chiede conferma.
-- Modalità semplice (`prefs.simpleMode`, scelta nell'onboarding e nel Profilo) per chi non conosce i valori nutrizionali: porzioni Piccola/Normale/Abbondante, semafori, consigli e idee per il prossimo pasto (`src/lib/logic/simple.ts`, idee in `src/lib/data/mealIdeas.ts`), il + apre la Foto AI. La modalità normale resta com'era.
+- Modalità semplice (`prefs.simpleMode`, scelta nell'onboarding e nel Profilo) per chi non conosce i valori nutrizionali: porzioni Piccola/Normale/Abbondante, semafori, consigli e idee per il prossimo pasto (`src/lib/logic/simple.ts`, idee in `src/lib/data/mealIdeas.ts`). La modalità normale resta com'era.
+- Il + (centrale e dei pasti) apre sempre il menu Aggiungi, anche in modalità semplice: l'utente non vuole che apra subito la fotocamera.
 - Logica in funzioni pure dentro `src/lib/logic`, con test Vitest. Il database passa da `src/lib/repo.ts` (test con fake-indexeddb in `src/lib/repo.test.ts`).
 - Grafica: tema verde lime (variabili in `src/app.css`), schede bianche molto arrotondate, carattere Outfit incluso. Il colore dei grafici è `--chart` (verificato per il contrasto).
   Nel tema scuro sfondi e schede sono grigio/nero neutri (l'utente non vuole la sfumatura verde): il verde resta solo su pulsanti e indicatori.
@@ -21,6 +22,10 @@
 - Non cambiare `appId` (`com.nikcirri.nutrizione`) né il nome del database IndexedDB (`nutrizione`). Se cambi lo schema, aggiungi una nuova `version()` in `src/lib/db.ts` senza togliere le vecchie.
 - Dati di Health Connect sempre freschi (`src/lib/healthSync.ts`): rilettura ogni minuto ad app aperta sul Diario, al ritorno nell'app e con "trascina in giù" (Diario e Progressi, in `App.svelte`).
 - Health Connect: l'app chiede solo letture (passi, calorie attive e totali, distanza, allenamenti). I permessi in più dichiarati dal plugin si tolgono in `android/app/src/main/AndroidManifest.xml` con `tools:node="remove"`.
+  `src/android.test.ts` confronta il manifest con quello del plugin e `scripts/check-apk.sh` controlla l'APK finito in GitHub Actions: se compare un permesso non previsto la build si ferma.
 - Aggiornamenti: controllo all'apertura e al ritorno nell'app (al massimo ogni 10 minuti, `src/lib/state/update.svelte.ts`); "Aggiorna" scarica l'APK con il plugin dell'app `AppUpdaterPlugin.java` (accetta solo URL delle Release di questo repo) e apre l'installazione di Android (permesso `REQUEST_INSTALL_PACKAGES`). Le prime 3 righe del changelog compaiono nell'avviso: scrivile brevi.
 - R8 (minify) è spento di proposito: i plugin di Health Connect e dello scanner usano la reflection.
+- Leggerezza (APK circa 8 MB): solo librerie ARM (`abiFilters` in `android/app/build.gradle`); il modello ML Kit del codice a barre non è nell'APK (sostituzione in `android/build.gradle`, si usa lo scanner di Google Play services).
+  Schede e fogli si caricano quando servono (`src/lazy.ts`, precaricati quando il telefono è libero); il Diario resta nel codice iniziale.
+  Timer solo ad app aperta: usa `repeatInForeground` (`src/lib/foreground.ts`), mai `setInterval` lasciato girare in background.
 - Testi dell'interfaccia in italiano; codice e nomi in inglese.

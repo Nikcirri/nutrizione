@@ -36,4 +36,4 @@ if [ -n "$BAD" ]; then
   echo "::error title=Permessi di Health Connect non previsti::$BAD (toglili in android/app/src/main/AndroidManifest.xml con tools:node=\"remove\")"
   exit 1
 fi
-echo "APK controllato: $((SIZE / 1024)) MB, Health Connect:$(echo " $HEALTH")"
+echo "APK controllato: $((SIZE / 1024)) MB, Health Connect: $(echo $HEALTH)"

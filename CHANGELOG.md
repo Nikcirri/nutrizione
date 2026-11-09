@@ -1,5 +1,13 @@
 # Novità
 
+## [0.5.1] - 2026-11-09
+
+- Il + apre di nuovo il menu per aggiungere, anche in modalità semplice.
+- App molto più leggera (da 30 a 8 MB): si apre prima e in background non lavora.
+- Health Connect: tolto il VO2max, l'app legge solo passi, calorie, distanza e allenamenti.
+- Foto AI: "Cerca un alimento" riporta alla ricerca con il cursore già pronto per scrivere.
+- Controllo automatico dei permessi di Health Connect prima di ogni pubblicazione.
+
 ## [0.5.0] - 2026-11-09
 
 - Modalità semplice: porzioni a occhio, semafori e consigli in parole (si attiva nel Profilo).
