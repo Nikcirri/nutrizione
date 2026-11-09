@@ -27,7 +27,8 @@ SIZE=$(du -k "$APK" | cut -f1)
   echo ""
   echo "Parti più pesanti:"
   echo '```'
-  unzip -l "$APK" | sort -k1 -n -r | head -n 12
+  # awk legge tutto (con "head" sort si interromperebbe con un errore).
+  unzip -l "$APK" | sort -k1 -n -r | awk 'NR <= 12'
   echo '```'
 } >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
