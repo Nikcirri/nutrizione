@@ -1,6 +1,6 @@
 <script lang="ts">
   import { db } from '../lib/db';
-  import { addDays, lastDays, shortDate, weekdayLetter, tinyDate } from '../lib/logic/dates';
+  import { addDays, lastDays, shortDate, weekdayLetter } from '../lib/logic/dates';
   import { bmi, bmiLabel, weeksToTarget } from '../lib/logic/goals';
   import { fmtInt, fmtOne, sumEntries } from '../lib/logic/nutrition';
   import { allWeights, deleteWeight, entriesBetween, setWeight } from '../lib/repo';
@@ -40,7 +40,8 @@
   const bars = $derived(
     perDay.map((d) => ({
       key: d.key,
-      label: range === 7 ? weekdayLetter(d.key) : tinyDate(d.key),
+      // 7 giorni: lettera del giorno; 14 e 30: solo il numero (il mese si legge toccando la colonna).
+      label: range === 7 ? weekdayLetter(d.key) : String(Number(d.key.slice(8))),
       value: Math.round(d.n.kcal),
       title: shortDate(d.key, app.today),
     })),

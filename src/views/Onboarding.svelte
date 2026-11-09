@@ -1,7 +1,7 @@
 <script lang="ts">
   import { db } from '../lib/db';
   import { reportError } from '../lib/errors';
-  import { ACTIVITY_LEVELS, GOAL_TYPES, RATES, dailyTargets, energyPlan, weeksToTarget } from '../lib/logic/goals';
+  import { ACTIVITY_LEVELS, GOAL_TYPES, RATES, dailyTargets, energyPlan, rateLabel, weeksToTarget } from '../lib/logic/goals';
   import { fmtInt, fmtLiters, fmtOne, parseNum } from '../lib/logic/nutrition';
   import { backupSummary } from '../lib/logic/backup';
   import { setWeight } from '../lib/repo';
@@ -135,7 +135,7 @@
         <span class="lead">Quanto a settimana?</span>
         <div class="chips">
           {#each RATES as r (r)}
-            <button class="chip" aria-pressed={p.rateKg === r} onclick={() => (p.rateKg = r)}>{fmtOne(r)} kg{r === 0.5 ? ' (consigliato)' : ''}</button>
+            <button class="chip" aria-pressed={p.rateKg === r} onclick={() => (p.rateKg = r)}>{rateLabel(r)}{r === 0.5 ? ' (consigliato)' : ''}</button>
           {/each}
         </div>
         <label class="field"><span>Peso obiettivo (kg, facoltativo)</span><input class="input num" inputmode="decimal" bind:value={target} /></label>
@@ -162,7 +162,10 @@
         {/if}
       </div>
       {#if plan.clamped}
-        <p class="warning">Ho alzato le calorie al minimo consigliato. Per diete più restrittive fatti seguire da un medico o un nutrizionista.</p>
+        <p class="warning">
+          Il ritmo scelto ti porterebbe sotto il minimo consigliato, quindi l’obiettivo resta {fmtInt(targets.kcal)} kcal: perderai circa
+          {rateLabel(plan.effectiveRateKg)} a settimana. Per diete più restrittive fatti seguire da un medico o un nutrizionista.
+        </p>
       {/if}
       <p class="lead small">Sono stime: potrai cambiare tutto nel Profilo.</p>
     </section>

@@ -43,6 +43,15 @@ export interface EnergyPlan {
   kcal: number;
   /** true se il calcolo è stato alzato al minimo consigliato. */
   clamped: boolean;
+  /** Kg a settimana davvero ottenibili con queste calorie (meno del ritmo scelto se c'è il minimo). */
+  effectiveRateKg: number;
+  /** Ritmo più veloce possibile senza scendere sotto il minimo (solo per dimagrire). */
+  maxRateKg: number;
+}
+
+/** Kg a settimana che corrispondono a una differenza giornaliera di calorie. */
+export function kgPerWeek(dailyKcal: number): number {
+  return (Math.max(0, dailyKcal) * 7) / KCAL_PER_KG;
 }
 
 export function energyPlan(profile: Profile, weightKg: number, now: Date = new Date()): EnergyPlan {
@@ -55,7 +64,19 @@ export function energyPlan(profile: Profile, weightKg: number, now: Date = new D
   const min = minimumKcal(profile.sex);
   const clamped = kcal < min;
   if (clamped) kcal = min;
-  return { bmr: Math.round(b), tdee: Math.round(tdee), adjustment: Math.round(adjustment), kcal: Math.round(kcal / 10) * 10, clamped };
+  const rounded = Math.round(kcal / 10) * 10;
+  const maxRateKg = kgPerWeek(tdee - min);
+  const effectiveRateKg =
+    profile.goal === 'perdere' ? (clamped ? kgPerWeek(tdee - rounded) : profile.rateKg) : profile.goal === 'aumentare' ? profile.rateKg : 0;
+  return {
+    bmr: Math.round(b),
+    tdee: Math.round(tdee),
+    adjustment: Math.round(adjustment),
+    kcal: rounded,
+    clamped,
+    effectiveRateKg: Math.round(effectiveRateKg * 100) / 100,
+    maxRateKg: Math.round(maxRateKg * 100) / 100,
+  };
 }
 
 export interface DailyTargets {
@@ -103,13 +124,20 @@ export function bmiLabel(value: number): string {
   return 'Obesità';
 }
 
-/** Settimane stimate per arrivare al peso obiettivo (null se non ha senso). */
-export function weeksToTarget(profile: Profile, weightKg: number): number | null {
+/** Settimane stimate per arrivare al peso obiettivo con il ritmo davvero ottenibile (null se non ha senso). */
+export function weeksToTarget(profile: Profile, weightKg: number, now: Date = new Date()): number | null {
   if (profile.targetWeightKg === null || profile.goal === 'mantenere' || profile.rateKg <= 0) return null;
   const diff = profile.targetWeightKg - weightKg;
   if (profile.goal === 'perdere' && diff >= 0) return null;
   if (profile.goal === 'aumentare' && diff <= 0) return null;
-  return Math.ceil(Math.abs(diff) / profile.rateKg);
+  const rate = energyPlan(profile, weightKg, now).effectiveRateKg;
+  if (rate <= 0.01) return null;
+  return Math.ceil(Math.abs(diff) / rate);
+}
+
+/** "0,25 kg", "0,5 kg", "0,75 kg": il ritmo scritto per intero (senza arrotondare a 0,3 o 0,8). */
+export function rateLabel(kg: number): string {
+  return `${kg.toLocaleString('it-IT', { maximumFractionDigits: 2 })} kg`;
 }
 
 /** Corregge le percentuali dei macro perché sommino a 100 (cambia i grassi). */

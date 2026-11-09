@@ -3,7 +3,7 @@
   import { reportError } from '../lib/errors';
   import { connectHealthFlow, disconnectHealth } from '../lib/healthSync';
   import { backupSummary } from '../lib/logic/backup';
-  import { ACTIVITY_LEVELS, GOAL_TYPES, MACRO_PRESETS, RATES, balanceMacros, energyPlan, waterGoalMl } from '../lib/logic/goals';
+  import { ACTIVITY_LEVELS, GOAL_TYPES, MACRO_PRESETS, RATES, balanceMacros, energyPlan, minimumKcal, rateLabel, waterGoalMl } from '../lib/logic/goals';
   import { fmtInt, fmtLiters, fmtOne } from '../lib/logic/nutrition';
   import { RELEASES_PAGE } from '../lib/logic/updates';
   import { APP_VERSION, isNative, openExternal } from '../lib/platform';
@@ -145,7 +145,13 @@
         ? ` · ${plan.adjustment < 0 ? '−' : '+'}${fmtInt(Math.abs(plan.adjustment))} per ${profile.goal === 'perdere' ? 'dimagrire' : 'aumentare'}`
         : ''}
     </p>
-    {#if plan.clamped}<p class="explain">Alzato al minimo consigliato: sotto questa soglia meglio farsi seguire da un medico o un nutrizionista.</p>{/if}
+    {#if plan.clamped}
+      <p class="explain">
+        Il ritmo scelto ti porterebbe sotto {fmtInt(minimumKcal(profile.sex))} kcal, il minimo consigliato: l’obiettivo resta {fmtInt(plan.kcal)} kcal
+        e perdi circa {rateLabel(plan.effectiveRateKg)} a settimana. Per andare più veloce serve muoversi di più (le calorie dell’orologio si
+        aggiungono) o farsi seguire da un medico o un nutrizionista.
+      </p>
+    {/if}
   {/if}
 </section>
 
@@ -187,9 +193,21 @@
     <span class="sub">Ritmo a settimana</span>
     <div class="chips">
       {#each RATES as r (r)}
-        <button class="chip" aria-pressed={profile.rateKg === r} onclick={() => set((s) => (s.profile.rateKg = r))}>{fmtOne(r)} kg</button>
+        <button
+          class="chip"
+          class:capped={profile.goal === 'perdere' && r > plan.maxRateKg + 0.005}
+          aria-pressed={profile.rateKg === r}
+          onclick={() => set((s) => (s.profile.rateKg = r))}>{rateLabel(r)}</button
+        >
       {/each}
     </div>
+    {#if profile.goal === 'perdere' && RATES.some((r) => r > plan.maxRateKg + 0.005)}
+      <p class="note tight-top">
+        Per te il massimo è circa <strong>{rateLabel(plan.maxRateKg)}</strong> a settimana: con
+        {RATES.filter((r) => r > plan.maxRateKg + 0.005).map(rateLabel).join(' e ')} l’obiettivo resta fermo a {fmtInt(minimumKcal(profile.sex))} kcal,
+        il minimo consigliato.
+      </p>
+    {/if}
     <NumberField
       label="Peso obiettivo"
       value={profile.targetWeightKg ?? weightForCalc()}
@@ -417,6 +435,12 @@
   }
   .tight {
     margin-top: -6px;
+  }
+  .tight-top {
+    margin: -4px 0 0;
+  }
+  .chip.capped:not([aria-pressed='true']) {
+    opacity: 0.5;
   }
   .inner {
     padding: 12px 16px 16px;

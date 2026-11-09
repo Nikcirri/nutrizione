@@ -38,7 +38,11 @@
     return `M${x0},${base}V${top + r}Q${x0},${top} ${x0 + r},${top}H${x1 - r}Q${x1},${top} ${x1},${top + r}V${base}Z`;
   }
 
-  const showLabels = $derived(items.length <= 14);
+  // Le etichette dei giorni non devono toccarsi: se non c'è spazio se ne mostra una ogni `every`,
+  // partendo dall'ultima (oggi). Il giorno toccato si legge comunque nella riga sotto il grafico.
+  const labelWidth = $derived(Math.max(...items.map((i) => i.label.length), 1) * 7 + 8);
+  const every = $derived(Math.max(1, Math.ceil(labelWidth / Math.max(1, band))));
+  const showLabel = (i: number) => (items.length - 1 - i) % every === 0;
 </script>
 
 <div class="chart" bind:clientWidth={width}>
@@ -51,7 +55,7 @@
     {#each items as it, i (it.key)}
       {@const x = band * i + band / 2}
       <path d={barPath(x, it.value)} class="bar" class:dim={selected !== i && it.value > 0} />
-      {#if showLabels || i === selected || i === items.length - 1}
+      {#if showLabel(i)}
         <text x={x} y={height - 8} text-anchor="middle" class="day" class:strong={i === selected}>{it.label}</text>
       {/if}
       <rect

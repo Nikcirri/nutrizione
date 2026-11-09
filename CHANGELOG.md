@@ -1,5 +1,11 @@
 # Novità
 
+## [0.4.1] - 2026-11-09
+
+- Grafico delle calorie: i giorni sotto le colonne non si sovrappongono più.
+- Ritmo a settimana scritto per intero (0,25 / 0,5 / 0,75 kg) e spiegato quando l'obiettivo resta al minimo.
+- Le settimane per arrivare al peso obiettivo usano il ritmo davvero possibile.
+
 ## [0.4.0] - 2026-11-09
 
 - Dati dell'orologio sempre aggiornati: ad app aperta si rileggono ogni minuto e ogni volta che torni nell'app.

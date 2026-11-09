@@ -4,7 +4,7 @@ import { activityKcal } from './activities';
 import { BackupError, makeBackup, parseBackup, type BackupData } from './backup';
 import { addDays, dayChip, dayLabel, isDateKey, lastDays, mealForHour, weekDays } from './dates';
 import { fastStats, fastStatus, formatClock, formatHours } from './fasting';
-import { balanceMacros, bmi, bmr, dailyTargets, dayBudget, energyPlan, waterGoalMl, weeksToTarget } from './goals';
+import { balanceMacros, bmi, bmr, dailyTargets, dayBudget, energyPlan, rateLabel, waterGoalMl, weeksToTarget } from './goals';
 import { amountLabel, fmtG, kcalFromMacros, macroSplit, parseNum, scale, sumEntries } from './nutrition';
 import { detectUnit, isBarcode, parseNutriments, parseProductResponse, parseSearchResponse } from './off';
 import { matchScore, normalize, searchFoods } from './search';
@@ -124,6 +124,26 @@ describe('obiettivi', () => {
     expect(plan.kcal).toBe(1200);
     expect(plan.clamped).toBe(true);
   });
+  it('con il minimo, 0,5 e 0,75 kg danno lo stesso obiettivo e il ritmo vero è più lento', () => {
+    // Uomo, 23 anni, 170 cm, 74 kg, sedentario: consuma circa 2031 kcal, il minimo è 1500.
+    const base = { ...DEFAULT_PROFILE, sex: 'm' as const, birthYear: 2003, heightCm: 170, weightKg: 74, activity: 'sedentario' as const, goal: 'perdere' as const, targetWeightKg: 65 };
+    const now = new Date('2026-11-09');
+    const fast = energyPlan({ ...base, rateKg: 0.75 }, 74, now);
+    const mid = energyPlan({ ...base, rateKg: 0.5 }, 74, now);
+    const slow = energyPlan({ ...base, rateKg: 0.25 }, 74, now);
+    expect(fast.tdee).toBe(2031);
+    expect(fast.kcal).toBe(1500);
+    expect(mid.kcal).toBe(1500);
+    expect(slow.kcal).toBe(1760);
+    expect(fast.maxRateKg).toBeCloseTo(0.48, 2);
+    expect(fast.effectiveRateKg).toBeCloseTo(0.48, 1);
+    expect(slow.effectiveRateKg).toBe(0.25);
+    expect(weeksToTarget({ ...base, rateKg: 0.75 }, 74, now)).toBe(19);
+  });
+  it('ritmo scritto per intero', () => {
+    expect(rateLabel(0.25)).toBe('0,25 kg');
+    expect(rateLabel(0.5)).toBe('0,5 kg');
+  });
   it('macro in grammi dalle percentuali', () => {
     const s = defaultSettings();
     s.goals.autoKcal = false;
@@ -140,7 +160,7 @@ describe('obiettivi', () => {
     expect(dayBudget(2000, 300, true)).toBe(2300);
     expect(dayBudget(2000, 300, false)).toBe(2000);
     expect(bmi(70, 175)).toBeCloseTo(22.86, 1);
-    expect(weeksToTarget({ ...DEFAULT_PROFILE, goal: 'perdere', rateKg: 0.5, targetWeightKg: 75 }, 80)).toBe(10);
+    expect(weeksToTarget({ ...DEFAULT_PROFILE, sex: 'm', heightCm: 180, birthYear: 1996, activity: 'moderato', goal: 'perdere', rateKg: 0.5, targetWeightKg: 75 }, 80, new Date('2026-06-01'))).toBe(10);
     expect(weeksToTarget({ ...DEFAULT_PROFILE, goal: 'perdere', rateKg: 0.5, targetWeightKg: 85 }, 80)).toBeNull();
   });
   it('le percentuali dei macro sommano sempre 100', () => {
