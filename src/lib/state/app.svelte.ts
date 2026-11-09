@@ -3,7 +3,7 @@ import { db } from '../db';
 import { todayKey } from '../logic/dates';
 import { dailyTargets, type DailyTargets } from '../logic/goals';
 import { defaultSettings } from '../logic/settings';
-import { getAiKey, latestWeight, loadSettings, saveSettings } from '../repo';
+import { latestWeight, loadSettings, saveSettings } from '../repo';
 import type { DiaryEntry, Food, MealId, Settings } from '../types';
 
 export type Tab = 'oggi' | 'digiuno' | 'progressi' | 'profilo';
@@ -17,10 +17,6 @@ export const app = $state({
   today: todayKey(),
   /** Ultima pesata (null se non ce ne sono). */
   currentWeight: null as number | null,
-  /** Aumenta quando arrivano dati nuovi da Health Connect (per ricaricare le schede). */
-  healthTick: 0,
-  /** C'è la chiave di Gemini (il + in modalità semplice apre la Foto AI). */
-  aiReady: false,
   /** Mostrare la scheda che presenta la modalità semplice (una volta sola). */
   simpleIntro: false,
 });
@@ -28,8 +24,7 @@ export const app = $state({
 export async function initApp(): Promise<void> {
   app.settings = await loadSettings(db);
   await refreshWeight();
-  const [key, intro] = await Promise.all([getAiKey(db).catch(() => ''), db.kv.get('simpleIntroSeen').catch(() => undefined)]);
-  app.aiReady = !!key;
+  const intro = await db.kv.get('simpleIntroSeen').catch(() => undefined);
   app.simpleIntro = app.settings.onboarded && !app.settings.prefs.simpleMode && !intro;
   app.ready = true;
 }

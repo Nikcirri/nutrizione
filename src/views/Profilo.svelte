@@ -70,7 +70,6 @@
     if (!ok) return;
     await setAiKey(db, '');
     aiKey = '';
-    app.aiReady = false;
     showToast('Chiave tolta');
   }
 
@@ -338,7 +337,6 @@
       onsaved={(k) => {
         aiKey = k;
         changingKey = false;
-        app.aiReady = true;
       }}
     />
     {#if changingKey}<button class="btn btn-ghost btn-block" onclick={() => (changingKey = false)}>Annulla</button>{/if}

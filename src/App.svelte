@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { reportError } from './lib/errors';
+  import { repeatInForeground } from './lib/foreground';
   import { startLiveHealth, syncHealthDay } from './lib/healthSync';
   import { mealForHour } from './lib/logic/dates';
   import { onBackButton, onResume, tapFeedback } from './lib/platform';
@@ -11,19 +12,8 @@
   import DialogHost from './lib/ui/DialogHost.svelte';
   import Icon, { type IconName } from './lib/ui/Icon.svelte';
   import Toast from './lib/ui/Toast.svelte';
-  import Digiuno from './views/Digiuno.svelte';
+  import { load, preloadAll } from './lazy';
   import Oggi from './views/Oggi.svelte';
-  import Onboarding from './views/Onboarding.svelte';
-  import Profilo from './views/Profilo.svelte';
-  import Progressi from './views/Progressi.svelte';
-  import ActivitySheet from './views/sheets/ActivitySheet.svelte';
-  import AddFoodSheet from './views/sheets/AddFoodSheet.svelte';
-  import AiMealSheet from './views/sheets/AiMealSheet.svelte';
-  import CreateFoodSheet from './views/sheets/CreateFoodSheet.svelte';
-  import FoodDetailSheet from './views/sheets/FoodDetailSheet.svelte';
-  import MyFoodsSheet from './views/sheets/MyFoodsSheet.svelte';
-  import QuickAddSheet from './views/sheets/QuickAddSheet.svelte';
-  import WeightSheet from './views/sheets/WeightSheet.svelte';
 
   const TABS: { id: Tab; label: string; icon: IconName }[] = [
     { id: 'oggi', label: 'Diario', icon: 'meal' },
@@ -74,7 +64,7 @@
     tickToday();
     const health = app.settings.prefs.healthConnected;
     const results = await Promise.allSettled([
-      health ? syncHealthDay(app.date, true).then(() => void app.healthTick++) : Promise.resolve(),
+      health ? syncHealthDay(app.date, true) : Promise.resolve(),
       refreshUpdate(),
     ]);
     const failed = results[0]?.status === 'rejected';
@@ -103,6 +93,7 @@
   onMount(() => {
     initApp()
       .then(async () => {
+        preloadAll();
         await announceNewVersion().catch(() => undefined);
         if (app.settings.onboarded) await refreshUpdate();
       })
@@ -125,15 +116,13 @@
       void resumeUpdate();
       if (app.settings.onboarded) void refreshUpdate();
       if (app.settings.prefs.healthConnected) {
-        syncHealthDay(app.date, true)
-          .then(() => app.healthTick++)
-          .catch(() => undefined);
+        syncHealthDay(app.date, true).catch(() => undefined);
       }
     });
     const stopLive = startLiveHealth();
-    const timer = setInterval(tickToday, 30_000);
+    const stopDayTicker = repeatInForeground(tickToday, 30_000);
     return () => {
-      clearInterval(timer);
+      stopDayTicker();
       stopLive();
     };
   });
@@ -142,7 +131,7 @@
 {#if !app.ready}
   <div class="splash" aria-hidden="true"></div>
 {:else if !app.settings.onboarded}
-  <Onboarding />
+  {#await load.onboarding() then m}<m.default />{/await}
 {:else}
   <div class="shell">
     {#if pull > 0}
@@ -186,11 +175,11 @@
       {#if app.tab === 'oggi'}
         <Oggi />
       {:else if app.tab === 'digiuno'}
-        <Digiuno />
+        {#await load.digiuno() then m}<m.default />{/await}
       {:else if app.tab === 'progressi'}
-        <Progressi />
+        {#await load.progressi() then m}<m.default />{/await}
       {:else}
-        <Profilo />
+        {#await load.profilo() then m}<m.default />{/await}
       {/if}
     </main>
 
@@ -209,14 +198,15 @@
     </nav>
   </div>
 
-  {#if sheets.addFood}<AddFoodSheet request={sheets.addFood} />{/if}
-  {#if sheets.aiMeal}<AiMealSheet request={sheets.aiMeal} />{/if}
-  {#if sheets.myFoods}<MyFoodsSheet />{/if}
-  {#if sheets.detail}<FoodDetailSheet request={sheets.detail} />{/if}
-  {#if sheets.createFood}<CreateFoodSheet request={sheets.createFood} />{/if}
-  {#if sheets.quickAdd}<QuickAddSheet request={sheets.quickAdd} />{/if}
-  {#if sheets.activity}<ActivitySheet date={sheets.activity.date} />{/if}
-  {#if sheets.weight}<WeightSheet date={sheets.weight.date} />{/if}
+  <!-- I fogli si caricano la prima volta che servono (di solito sono già pronti, vedi lazy.ts). -->
+  {#if sheets.addFood}{#await load.addFood() then m}<m.default request={sheets.addFood} />{/await}{/if}
+  {#if sheets.aiMeal}{#await load.aiMeal() then m}<m.default request={sheets.aiMeal} />{/await}{/if}
+  {#if sheets.myFoods}{#await load.myFoods() then m}<m.default />{/await}{/if}
+  {#if sheets.detail}{#await load.detail() then m}<m.default request={sheets.detail} />{/await}{/if}
+  {#if sheets.createFood}{#await load.createFood() then m}<m.default request={sheets.createFood} />{/await}{/if}
+  {#if sheets.quickAdd}{#await load.quickAdd() then m}<m.default request={sheets.quickAdd} />{/await}{/if}
+  {#if sheets.activity}{#await load.activity() then m}<m.default date={sheets.activity.date} />{/await}{/if}
+  {#if sheets.weight}{#await load.weight() then m}<m.default date={sheets.weight.date} />{/await}{/if}
 {/if}
 
 <BusyOverlay />

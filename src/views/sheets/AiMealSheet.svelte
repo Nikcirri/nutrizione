@@ -292,10 +292,7 @@
     <p class="empty">Un momento…</p>
   {:else if !key}
     <AiKeyForm
-      onsaved={(k) => {
-        key = k;
-        app.aiReady = true;
-      }}
+      onsaved={(k) => (key = k)}
     />
     <button
       class="btn btn-ghost btn-block"

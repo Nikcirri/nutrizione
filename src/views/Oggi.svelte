@@ -29,7 +29,7 @@
   const entries = useLive(() => app.date, (d) => entriesFor(db, d), [] as DiaryEntry[]);
   const water = useLive(() => app.date, (d) => getWater(db, d), 0);
   const manual = useLive(() => app.date, (d) => activitiesFor(db, d), []);
-  const health = useLive(() => [app.date, app.healthTick] as const, ([d]) => healthFor(db, d), undefined);
+  const health = useLive(() => app.date, (d) => healthFor(db, d), undefined);
   // Giorni della settimana con qualcosa nel diario (puntino sotto il numero).
   const week = $derived(weekDays(app.date));
   const weekEntries = useLive(
@@ -109,9 +109,7 @@
   $effect(() => {
     const d = app.date;
     if (!app.settings.prefs.healthConnected) return;
-    syncHealthDay(d)
-      .then(() => app.healthTick++)
-      .catch(() => undefined);
+    syncHealthDay(d).catch(() => undefined);
   });
 
   const pct = (v: number, t: number) => (t > 0 ? Math.round((v / t) * 100) : 0);
@@ -173,7 +171,6 @@
     try {
       const ok = await connectHealthFlow();
       showToast(ok ? 'Health Connect collegato' : 'Nessun permesso concesso: puoi riprovare dal Profilo.');
-      app.healthTick++;
     } catch (e) {
       reportError(e);
     }
@@ -183,7 +180,6 @@
     syncing = true;
     try {
       await syncHealthDay(app.date, true);
-      app.healthTick++;
     } catch (e) {
       reportError(e, 'Non riesco a leggere i dati da Health Connect.');
     } finally {

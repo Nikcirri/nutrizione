@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { repeatInForeground } from '../lib/foreground';
   import { db } from '../lib/db';
   import { reportError } from '../lib/errors';
   import { dateTimeLabel, fromLocalInput, timeLabel, toLocalInput } from '../lib/logic/dates';
@@ -20,10 +21,8 @@
   const plan = $derived(app.settings.prefs.fastPlanHours);
 
   let now = $state(new Date());
-  $effect(() => {
-    const t = setInterval(() => (now = new Date()), 1000);
-    return () => clearInterval(t);
-  });
+  // L'orologio corre solo ad app aperta (in background non serve ridisegnarlo).
+  $effect(() => repeatInForeground(() => (now = new Date()), 1000));
 
   const status = $derived(current ? fastStatus(current, now) : null);
 

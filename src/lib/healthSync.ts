@@ -1,6 +1,7 @@
 // Sincronizzazione con Health Connect: legge i dati di un giorno e li salva nel diario.
 import { db } from './db';
 import { UserError } from './errors';
+import { inForeground, repeatInForeground } from './foreground';
 import { isNative } from './platform';
 import { healthFor, saveHealth } from './repo';
 import { connectHealth, healthAuthorized, healthAvailability, readHealthDay } from './services/health';
@@ -52,19 +53,9 @@ export async function disconnectHealth(): Promise<void> {
  * e ogni volta che si torna nell'app. Restituisce la funzione per fermarlo.
  */
 export function startLiveHealth(): () => void {
-  const tick = () => {
-    if (document.visibilityState !== 'visible' || app.tab !== 'oggi' || !app.settings.prefs.healthConnected) return;
-    syncHealthDay(app.date)
-      .then(() => app.healthTick++)
-      .catch(() => undefined);
-  };
-  const timer = setInterval(tick, LIVE_INTERVAL_MS);
-  const onVisible = () => {
-    if (document.visibilityState === 'visible') tick();
-  };
-  document.addEventListener('visibilitychange', onVisible);
-  return () => {
-    clearInterval(timer);
-    document.removeEventListener('visibilitychange', onVisible);
-  };
+  return repeatInForeground(() => {
+    if (!inForeground() || app.tab !== 'oggi' || !app.settings.prefs.healthConnected) return;
+    // Il Diario si aggiorna da solo quando i dati salvati cambiano (useLive).
+    syncHealthDay(app.date).catch(() => undefined);
+  }, LIVE_INTERVAL_MS);
 }
