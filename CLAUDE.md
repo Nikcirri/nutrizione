@@ -26,6 +26,10 @@
 - Health Connect: l'app chiede solo letture (passi, calorie attive e totali, distanza, allenamenti). I permessi in più dichiarati dal plugin si tolgono in `android/app/src/main/AndroidManifest.xml` con `tools:node="remove"`.
   `src/android.test.ts` confronta il manifest con quello del plugin e `scripts/check-apk.sh` controlla l'APK finito in GitHub Actions: se compare un permesso non previsto la build si ferma.
 - Aggiornamenti: controllo all'apertura e al ritorno nell'app (al massimo ogni 10 minuti, `src/lib/state/update.svelte.ts`); "Aggiorna" scarica l'APK con il plugin dell'app `AppUpdaterPlugin.java` (accetta solo URL delle Release di questo repo) e apre l'installazione di Android (permesso `REQUEST_INSTALL_PACKAGES`). Le prime 3 righe del changelog compaiono nell'avviso: scrivile brevi.
+- Widget della schermata Home (codice in `android/app/src/main/java/com/nikcirri/nutrizione/widgets/`, layout `res/layout/widget_*.xml`):
+  "Calorie rimaste": i numeri di oggi li manda l'app con `WidgetsPlugin.setCalories` a ogni modifica (`src/lib/widgetSync.svelte.ts`, logica in `src/lib/logic/widget.ts`); toccarlo apre l'app, il suo + apre il menu Aggiungi (evento `widgetAction`).
+  "Sigarette": − e + funzionano ad app chiusa (`WidgetActionReceiver`); un numero per giorno nelle SharedPreferences `widgets` (chiavi `cig_AAAA-MM-GG`), fuori dal database e dai backup.
+  Nei layout solo viste ammesse nei widget (LinearLayout, TextView, ImageView, ProgressBar…), controllate da `src/android.test.ts`. Niente `updatePeriodMillis`: il cambio del giorno usa una sveglia `AlarmManager.RTC` che non accende il telefono.
 - R8 (minify) è spento di proposito: i plugin di Health Connect e dello scanner usano la reflection.
 - Leggerezza (APK circa 8 MB): solo librerie ARM (`abiFilters` in `android/app/build.gradle`); il modello ML Kit del codice a barre non è nell'APK (sostituzione in `android/build.gradle`, si usa lo scanner di Google Play services).
   Schede e fogli si caricano quando servono (`src/lazy.ts`, precaricati quando il telefono è libero); il Diario resta nel codice iniziale.

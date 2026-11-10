@@ -1,5 +1,13 @@
 # Novità
 
+## [0.6.0] - 2026-11-10
+
+- Nuovo widget "Calorie rimaste" per la schermata Home, con il + per aggiungere un pasto.
+- Nuovo widget "Sigarette": il numero di oggi con i pulsanti − e +.
+- I widget non consumano batteria: si aggiornano solo quando cambia qualcosa.
+- Il widget delle calorie si può allargare per vedere mangiate, bruciate e obiettivo.
+- Il conteggio delle sigarette riparte da zero a mezzanotte.
+
 ## [0.5.2] - 2026-11-10
 
 - Foto AI: dopo lo scatto hai il tempo di scrivere cosa c'è nel piatto, poi tocchi Calcola.
