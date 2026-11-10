@@ -4,4 +4,22 @@
     <string name="title_activity_main">Nutrizione</string>
     <string name="package_name">com.nikcirri.nutrizione</string>
     <string name="custom_url_scheme">com.nikcirri.nutrizione</string>
+
+    <!-- Widget della schermata Home -->
+    <string name="widget_calories_name">Calorie rimaste</string>
+    <string name="widget_calories_desc">Le calorie che ti restano oggi, con il + per aggiungere un pasto.</string>
+    <string name="widget_calories_title">Calorie</string>
+    <string name="widget_calories_left">kcal rimaste</string>
+    <string name="widget_calories_over">kcal in più</string>
+    <string name="widget_calories_open">Apri l’app per iniziare</string>
+    <string name="widget_calories_detail">%1$d di %2$d kcal</string>
+    <string name="widget_calories_detail_wide">Mangiate %1$d · Obiettivo %2$d</string>
+    <string name="widget_calories_detail_wide_burned">Mangiate %1$d · Bruciate %2$d · Obiettivo %3$d</string>
+    <string name="widget_add_meal">Aggiungi un pasto</string>
+    <string name="widget_cig_name">Sigarette</string>
+    <string name="widget_cig_desc">Conta le sigarette di oggi con + e −. A mezzanotte riparte da zero.</string>
+    <string name="widget_cig_title">Oggi</string>
+    <string name="widget_cig_count">%1$d sigarette oggi</string>
+    <string name="widget_cig_plus">Aggiungi una sigaretta</string>
+    <string name="widget_cig_minus">Togli una sigaretta</string>
 </resources>

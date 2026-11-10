@@ -5,9 +5,11 @@
   import { startLiveHealth, syncHealthDay } from './lib/healthSync';
   import { mealForHour } from './lib/logic/dates';
   import { onBackButton, onResume, tapFeedback } from './lib/platform';
+  import { onAddMealFromWidget } from './lib/services/widgets';
   import { app, initApp, sheets, tickToday, type Tab } from './lib/state/app.svelte';
   import { announceNewVersion, installUpdate, refreshUpdate, resumeUpdate, update } from './lib/state/update.svelte';
   import { closeTopOverlay, showToast } from './lib/state/ui.svelte';
+  import { useWidgetSync } from './lib/widgetSync.svelte';
   import BusyOverlay from './lib/ui/BusyOverlay.svelte';
   import DialogHost from './lib/ui/DialogHost.svelte';
   import Icon, { type IconName } from './lib/ui/Icon.svelte';
@@ -23,6 +25,9 @@
   ];
 
   let main = $state<HTMLElement | null>(null);
+
+  // Il widget "Calorie" della schermata Home riceve i numeri di oggi a ogni modifica.
+  useWidgetSync();
 
   // ---------- Trascina in giù per aggiornare (Diario e Progressi) ----------
   const PULL_TRIGGER = 64;
@@ -90,10 +95,27 @@
     sheets.addFood = { date, meal };
   }
 
+  /** Il + del widget "Calorie": apre l'app direttamente sul menu Aggiungi di oggi. */
+  function addMealFromWidget() {
+    if (!app.settings.onboarded) return;
+    tickToday();
+    sheets.aiMeal = null;
+    sheets.detail = null;
+    sheets.createFood = null;
+    sheets.quickAdd = null;
+    sheets.activity = null;
+    sheets.weight = null;
+    sheets.myFoods = false;
+    app.tab = 'oggi';
+    app.date = app.today;
+    sheets.addFood = { date: app.today, meal: mealForHour(new Date().getHours()) };
+  }
+
   onMount(() => {
     initApp()
       .then(async () => {
         preloadAll();
+        onAddMealFromWidget(addMealFromWidget);
         await announceNewVersion().catch(() => undefined);
         if (app.settings.onboarded) await refreshUpdate();
       })

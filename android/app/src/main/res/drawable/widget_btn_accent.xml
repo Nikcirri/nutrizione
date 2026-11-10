@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pulsante arrotondato dei widget, con l'effetto al tocco -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/widget_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_accent" />
+            <corners android:radius="22dp" />
+        </shape>
+    </item>
+</ripple>

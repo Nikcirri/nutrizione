@@ -30,6 +30,39 @@
 
         </activity>
 
+        <!-- Widget della schermata Home. I due "provider" ricevono solo i segnali di Android per i widget. -->
+        <receiver
+            android:name=".widgets.CaloriesWidget"
+            android:exported="true"
+            android:label="@string/widget_calories_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_calories_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.CigaretteWidget"
+            android:exported="true"
+            android:label="@string/widget_cig_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_cigarettes_info" />
+        </receiver>
+        <!-- Pulsanti − e + delle sigarette e cambio del giorno: non raggiungibile da altre app. -->
+        <receiver
+            android:name=".widgets.WidgetActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

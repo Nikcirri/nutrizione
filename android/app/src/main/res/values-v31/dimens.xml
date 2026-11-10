@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Da Android 12 gli angoli dei widget li decide il telefono, uguali per tutte le app -->
+    <dimen name="widget_radius">@android:dimen/system_app_widget_background_radius</dimen>
+</resources>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icona della sigaretta per il widget (disegno a linee, come le icone dell'app) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- corpo con il filtro -->
+    <path
+        android:pathData="M3,13.5h14v4H3a1,1 0,0 1,-1 -1v-2a1,1 0,0 1,1 -1z"
+        android:strokeColor="@color/widget_text"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M6.8,13.5v4"
+        android:strokeColor="@color/widget_text"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round" />
+    <!-- punta accesa -->
+    <path
+        android:pathData="M19.6,13.5h1.4a1,1 0,0 1,1 1v2a1,1 0,0 1,-1 1h-1.4z"
+        android:fillColor="@color/widget_text"
+        android:strokeColor="@color/widget_text"
+        android:strokeWidth="1.2"
+        android:strokeLineJoin="round" />
+    <!-- fumo -->
+    <path
+        android:pathData="M17.4,10.6c0,-2.2 -2,-2.3 -2,-4.6"
+        android:strokeColor="@color/widget_text"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M21,10.6c0,-2.2 -2,-2.3 -2,-4.6"
+        android:strokeColor="@color/widget_text"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round" />
+</vector>
