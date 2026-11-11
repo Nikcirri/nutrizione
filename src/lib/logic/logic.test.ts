@@ -80,6 +80,10 @@ describe('valori nutrizionali', () => {
     expect(amountLabel({ amount: 150, unit: 'g', portionLabel: 'Vasetto (150 g)', portionCount: 1 })).toBe('Vasetto (150 g)');
     expect(amountLabel({ amount: 300, unit: 'g', portionLabel: 'Vasetto (150 g)', portionCount: 2 })).toBe('2 × Vasetto (150 g)');
     expect(amountLabel({ amount: 125, unit: 'ml' })).toBe('125 ml');
+    // Porzione "a occhio": il nome non dice il peso, quindi i grammi si aggiungono.
+    expect(amountLabel({ amount: 210, unit: 'g', portionLabel: 'Porzione abbondante', portionCount: 1 })).toBe('Porzione abbondante · 210 g');
+    expect(amountLabel({ amount: 60, unit: 'g', portionLabel: 'Fetta', portionCount: 2 })).toBe('2 × Fetta · 60 g');
+    expect(amountLabel({ amount: 0, unit: 'g', quick: true })).toBe('');
   });
 });
 
@@ -300,6 +304,11 @@ describe('impostazioni', () => {
     expect(s.profile.birthYear).toBe(1990);
     expect(s.goals.carbsPct + s.goals.proteinPct + s.goals.fatPct).toBe(100);
     expect(sanitizeSettings(null).onboarded).toBe(false);
+    // Un backup vecchio con la "modalità semplice" si carica lo stesso: quel campo non esiste più e si ignora.
+    const old = sanitizeSettings({ onboarded: true, prefs: { simpleMode: true, glassMl: 300 } });
+    expect(old.onboarded).toBe(true);
+    expect(old.prefs.glassMl).toBe(300);
+    expect('simpleMode' in old.prefs).toBe(false);
   });
 });
 

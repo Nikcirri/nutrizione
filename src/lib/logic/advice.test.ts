@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { MEAL_IDEAS } from '../data/mealIdeas';
-import { dayHints, dayVerdict, mealVerdict, nextMeal, nextMealAdvice, portionGrams, sizeFor } from './simple';
+import { dayHints, dayVerdict, mealVerdict, nextMeal, nextMealAdvice, normalPortion, portionGrams } from './advice';
 
-describe('modalità semplice: giudizi', () => {
+describe('consigli: giudizi', () => {
   it('pasto giusto, abbondante, molto abbondante', () => {
     expect(mealVerdict(500, 500)?.light).toBe('green');
     expect(mealVerdict(650, 500)?.light).toBe('yellow');
@@ -17,7 +17,7 @@ describe('modalità semplice: giudizi', () => {
   });
 });
 
-describe('modalità semplice: consigli', () => {
+describe('consigli: consigli', () => {
   const base = { budget: 2000, proteinTarget: 100, fiberTarget: 28, waterMl: 2000, waterTarget: 2000, hour: 12, isToday: true };
   it('poche proteine e poche fibre a metà giornata', () => {
     const hints = dayHints({ ...base, eaten: { kcal: 1200, carbs: 200, protein: 15, fat: 30, fiber: 2 } });
@@ -37,7 +37,7 @@ describe('modalità semplice: consigli', () => {
   });
 });
 
-describe('modalità semplice: prossimo pasto', () => {
+describe('consigli: prossimo pasto', () => {
   it('salta i pasti già fatti', () => {
     expect(nextMeal('pranzo', new Set())).toBe('pranzo');
     expect(nextMeal('pranzo', new Set(['pranzo']))).toBe('spuntini');
@@ -56,12 +56,24 @@ describe('modalità semplice: prossimo pasto', () => {
   });
 });
 
-describe('modalità semplice: porzioni a occhio', () => {
+describe('consigli: porzioni a occhio', () => {
   it('piccola, normale, abbondante', () => {
     expect(portionGrams(80, 'piccola')).toBe(56);
     expect(portionGrams(80, 'abbondante')).toBe(112);
-    expect(sizeFor(80, 80)).toBe('normale');
-    expect(sizeFor(50, 80)).toBe('piccola');
-    expect(sizeFor(120, 80)).toBe('abbondante');
+  });
+  it('porzione normale: quella indicata dall’alimento, altrimenti stimata dalle calorie', () => {
+    expect(normalPortion([{ grams: 80 }, { grams: 100 }], 355, 'g')).toEqual({ grams: 80, estimated: false });
+    // Senza porzione indicata: più calorie, porzione più piccola.
+    expect(normalPortion([], 899, 'g')).toEqual({ grams: 10, estimated: true }); // olio
+    expect(normalPortion([], 620, 'g').grams).toBe(30); // frutta secca
+    expect(normalPortion([], 540, 'g').grams).toBe(30); // cioccolato
+    expect(normalPortion([], 270, 'g').grams).toBe(60); // pane
+    expect(normalPortion([], 160, 'g').grams).toBe(150); // carne, pasta cotta
+    expect(normalPortion([], 40, 'g').grams).toBe(200); // verdura, frutta
+    expect(normalPortion([], 42, 'ml').grams).toBe(200); // bibita
+    expect(normalPortion([], 250, 'ml').grams).toBe(30); // liquore
+    expect(normalPortion([], 880, 'ml').grams).toBe(10); // olio misurato in ml
+    // Una porzione a zero grammi non vale.
+    expect(normalPortion([{ grams: 0 }], 100, 'g').estimated).toBe(true);
   });
 });

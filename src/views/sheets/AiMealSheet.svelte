@@ -16,7 +16,7 @@
     type AiMeal,
   } from '../../lib/logic/ai';
   import { fmtG, fmtInt, parseNum } from '../../lib/logic/nutrition';
-  import { mealVerdict } from '../../lib/logic/simple';
+  import { mealVerdict } from '../../lib/logic/advice';
   import { tapFeedback } from '../../lib/platform';
   import { addEntry, addHabit, findDish, getAiKey, getHabits, saveDish, topDishes } from '../../lib/repo';
   import { AiError, analyzeMeal } from '../../lib/services/gemini';
@@ -38,7 +38,6 @@
     tag?: string;
   }
 
-  const simple = $derived(app.settings.prefs.simpleMode);
   let key = $state<string | null>(null);
   let image = $state<PreparedImage | null>(null);
   let description = $state('');
@@ -54,7 +53,7 @@
   let usedModel = $state('');
   let rows = $state<Row[]>([]);
   let answers = $state<Record<number, number>>({});
-  let details = $state(false);
+  let details = $state(true);
   let known = $state<Dish | null>(null);
   let dishes = $state<Dish[]>([]);
   let addingText = $state<string | null>(null);
@@ -164,7 +163,8 @@
       rows = r.items.map((i) => ({ base: i, grams: String(i.grams), include: true }));
       answers = Object.fromEntries(r.questions.map((_, i) => [i, 0]));
       known = r.items.length ? ((await findDish(db, r.dish)) ?? null) : null;
-      details = !simple;
+      // Ingredienti, grammi e macro sempre in vista: si possono nascondere con un tocco.
+      details = true;
       void tapFeedback();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -304,7 +304,7 @@
   const lightEmoji = (l: string) => (l === 'green' ? '🟢' : l === 'yellow' ? '🟡' : '🔴');
 </script>
 
-<Sheet title={simple ? 'Cosa hai mangiato?' : 'Piatto da foto (AI)'} onclose={close}>
+<Sheet title="Cosa hai mangiato?" onclose={close}>
   {#if key === null}
     <p class="empty">Un momento…</p>
   {:else if !key}

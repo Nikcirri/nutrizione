@@ -3,10 +3,10 @@
 #
 # Come si usa (serve Python con Playwright e Chrome; non fa parte di `npm run verify`):
 #   npm run build && npx vite preview --port 4173 --strictPort &
-#   python3 scripts/overlap-check.py 384 semplice
-#   python3 scripts/overlap-check.py 360 normale
+#   python3 scripts/overlap-check.py 384
+#   python3 scripts/overlap-check.py 360
 # Argomenti: LARGHEZZA dello schermo in pixel CSS (384 è il telefono dell'utente; provare anche 360 e 320),
-# poi `semplice` o `normale`, poi (facoltativi) `shot` per salvare le schermate in /tmp e l'ingrandimento
+# poi (facoltativi, in qualsiasi ordine) `shot` per salvare le schermate in /tmp e l'ingrandimento
 # dei caratteri (1.15 = caratteri del telefono più grandi).
 # Esce con errore se trova un problema o se un passo non riesce.
 # Chrome: variabile CHROME (se manca: /usr/bin/google-chrome). Indirizzo: variabile APP_URL.
@@ -14,10 +14,10 @@ import asyncio, json, os, re, sys
 from playwright.async_api import async_playwright
 
 WIDTH = int(sys.argv[1]) if len(sys.argv) > 1 else 384
-SIMPLE = (sys.argv[2] if len(sys.argv) > 2 else 'semplice') == 'semplice'
-SHOT = len(sys.argv) > 3 and sys.argv[3] == 'shot'
-ZOOM = float(sys.argv[4]) if len(sys.argv) > 4 else 1.0
-KEEP = ['diario pieno', 'ricerca "tonno"', 'i miei alimenti', 'dettaglio alimento lungo', 'foto AI · dettagli', 'foto AI · risultato · scorrimento 0', 'dettaglio Olio extravergine · Abbondante', 'i tuoi piatti']
+EXTRA = sys.argv[2:]
+SHOT = 'shot' in EXTRA
+ZOOM = next((float(a) for a in EXTRA if re.fullmatch(r'\d+(\.\d+)?', a)), 1.0)
+KEEP = ['diario pieno', 'ricerca "tonno"', 'i miei alimenti', 'dettaglio alimento lungo', 'foto AI · risultato', 'dettaglio Olio extravergine', 'dettaglio Tonno', 'dettaglio Pasta', 'i tuoi piatti', 'modifica voce', 'onboarding piano']
 
 DETECT = r"""
 () => {
@@ -136,7 +136,7 @@ async def main():
             steps.append(tag)
             if SHOT and any(k in tag for k in KEEP):
                 slug = re.sub(r'[^a-z0-9]+', '-', tag.lower()).strip('-')[:40]
-                await page.screenshot(path=f'/tmp/ov-{WIDTH}-{"s" if SIMPLE else "n"}-{len(steps):03d}-{slug}.png')
+                await page.screenshot(path=f'/tmp/ov-{WIDTH}-{len(steps):03d}-{slug}.png')
             res = await page.evaluate(DETECT)
             if res:
                 n += 1
@@ -174,26 +174,33 @@ async def main():
             await scan(f'onboarding {i + 1}')
             await page.get_by_role('button', name='Continua').click()
         await scan('onboarding piano')
-        if not SIMPLE:
-            await page.get_by_text('Sì, mostrami tutti i numeri').click()
         await page.get_by_text('Inizia a usare l’app').click()
         await page.wait_for_timeout(500)
         await scan_scroll(main_el, 'diario vuoto')
 
         # ---- aggiungi: ricerca e dettaglio ----
-        async def add_food(query, name, sizes=True):
+        async def add_food(query, name):
             await page.get_by_role('button', name='Aggiungi un alimento').click()
             await scan(f'aggiungi (menu)')
             await sheet().get_by_placeholder('Cerca un alimento').fill(query)
             await scan_scroll(sheet().locator('.body'), f'ricerca "{query}"')
             await sheet().get_by_role('button', name=name).first.click()
             await scan(f'dettaglio {name}')
-            if SIMPLE and sizes:
-                for s in ['Piccola', 'Normale', 'Abbondante']:
-                    await sheet().get_by_role('button', name=s, exact=True).click()
-                    await scan(f'dettaglio {name} · {s}')
-                await sheet().get_by_role('button', name='Altre misure').click()
-            await scan_scroll(sheet().locator('.body'), f'dettaglio {name} · misure')
+            body = sheet().locator('.body')
+            sizes_box = sheet().locator('.sizes')
+            await sizes_box.scroll_into_view_if_needed()
+            for s in ['Piccola', 'Normale', 'Abbondante']:
+                await sizes_box.get_by_role('button', name=s).click()
+                await body.evaluate('el => el.scrollTo(0, 0)')
+                await scan(f'dettaglio {name} · {s}')
+            await scan_scroll(body, f'dettaglio {name} · tutto')
+            # Le misure dell'alimento (cucchiaio, scatoletta…): si prova l'ultima, la quantità resta la stessa.
+            measure = sheet().locator('.measure select')
+            options = await measure.locator('option').count()
+            if options > 1:
+                await measure.select_option(index=options - 1)
+                await body.evaluate('el => el.scrollTo(0, 0)')
+                await scan(f'dettaglio {name} · misura dell’alimento')
             await sheet().get_by_role('button', name='Aggiungi ·').click()
             await page.wait_for_timeout(400)
             await scan('dopo aggiunta')
@@ -217,9 +224,10 @@ async def main():
             await page.wait_for_timeout(500)
             await page.screenshot(path=f'/tmp/ov-{WIDTH}-dopo-salva.png')
             await scan('dettaglio alimento lungo')
-            if SIMPLE and await sheet().get_by_role('button', name='Abbondante', exact=True).count():
-                await sheet().get_by_role('button', name='Abbondante', exact=True).click()
-                await scan('dettaglio alimento lungo · Abbondante')
+            await sheet().locator('.sizes').get_by_role('button', name='Abbondante').click()
+            await sheet().locator('.body').evaluate('el => el.scrollTo(0, 0)')
+            await scan('dettaglio alimento lungo · Abbondante')
+            await scan_scroll(sheet().locator('.body'), 'dettaglio alimento lungo · tutto')
             await sheet().get_by_role('button', name='Aggiungi ·').click()
             await page.wait_for_timeout(400)
             await scan('ricerca dopo creazione')
@@ -240,9 +248,9 @@ async def main():
             await page.wait_for_timeout(1200)
             body = sheet().locator('.body')
             await scan_scroll(body, 'foto AI · risultato')
-            if await page.get_by_role('button', name='Vedi dettagli (ingredienti e grammi)').count():
-                await page.get_by_role('button', name='Vedi dettagli (ingredienti e grammi)').click()
-            await scan_scroll(body, 'foto AI · dettagli')
+            await page.get_by_role('button', name='Nascondi dettagli').click()
+            await scan_scroll(body, 'foto AI · senza dettagli')
+            await page.get_by_role('button', name='Vedi dettagli (ingredienti e grammi)').click()
             await sheet().get_by_role('button', name='Aggiungi a').click()
             await page.wait_for_timeout(800)
             await page.get_by_role('button', name='Aggiungi un alimento').click()
@@ -313,7 +321,7 @@ async def main():
             await scan_scroll(sheet().locator('.body'), 'i miei alimenti')
         await step('profilo', profilo)
 
-        print(f'--- larghezza {WIDTH}, caratteri {round(ZOOM * 100)}%, modalità {"semplice" if SIMPLE else "normale"}: {len(steps)} schermate controllate')
+        print(f'--- larghezza {WIDTH}, caratteri {round(ZOOM * 100)}%: {len(steps)} schermate controllate')
         for tag, res in found.items():
             print(f'[{tag}]')
             for r in res: print('   ', r)

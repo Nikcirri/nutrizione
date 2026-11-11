@@ -6,8 +6,8 @@
   import { fmtG, fmtInt, fmtOne, macroSplit, parseNum, scale } from '../../lib/logic/nutrition';
   import { tapFeedback } from '../../lib/platform';
   import { addEntry, deleteEntry, restoreEntries, setFavorite, updateEntry } from '../../lib/repo';
-  import { app, sheets, type DetailRequest } from '../../lib/state/app.svelte';
-  import { HAND_GUIDE, PORTION_SIZES, portionGrams, type PortionSize } from '../../lib/logic/simple';
+  import { sheets, type DetailRequest } from '../../lib/state/app.svelte';
+  import { CHECK_QUANTITY_KCAL, ESTIMATED_GUIDE, HAND_GUIDE, PORTION_SIZES, normalPortion, portionGrams, type PortionSize } from '../../lib/logic/advice';
   import { showToast, showUndoToast } from '../../lib/state/ui.svelte';
   import { MEALS, type DiaryEntry, type Food, type MealId, type Portion } from '../../lib/types';
   import Icon from '../../lib/ui/Icon.svelte';
@@ -28,12 +28,6 @@
   let ready = $state(false);
 
   function initQuantity(f: Food) {
-    // Modalità semplice: si parte dalla porzione normale, scelta a occhio.
-    if (!entry && app.settings.prefs.simpleMode) {
-      choice = -1;
-      qty = fmtOne(f.portions[0]?.grams ?? 100);
-      return;
-    }
     if (entry) {
       const i = entry.portionLabel ? f.portions.findIndex((p) => p.label === entry.portionLabel) : -1;
       if (i >= 0 && entry.portionCount) {
@@ -43,12 +37,11 @@
         choice = -1;
         qty = fmtOne(entry.amount);
       }
-    } else if (f.portions.length) {
-      choice = 0;
-      qty = '1';
     } else {
+      // Si parte dalla porzione normale, sempre in grammi: così il numero nel riquadro vuol dire una cosa sola
+      // (chi scrive "95" intende 95 g, non 95 porzioni). Le misure dell'alimento si scelgono dal menu.
       choice = -1;
-      qty = '100';
+      qty = fmtOne(normalPortion(f.portions, f.per100.kcal, f.unit).grams);
     }
   }
 
@@ -68,21 +61,27 @@
   });
 
   const portion = $derived<Portion | null>(choice >= 0 ? (food.portions[choice] ?? null) : null);
-  const simple = $derived(app.settings.prefs.simpleMode);
-  let moreOptions = $state(false);
-  /** Porzione normale dell'alimento (la prima indicata, altrimenti 100 g). */
-  const normalGrams = $derived(food.portions[0]?.grams ?? 100);
+  /** Porzione normale dell'alimento: quella che indica, altrimenti una stima dalle calorie. */
+  const normal = $derived(normalPortion(food.portions, food.per100.kcal, food.unit));
+  const normalGrams = $derived(normal.grams);
   const count = $derived(parseNum(qty));
   const amount = $derived(count === null ? 0 : portion ? count * portion.grams : count);
   const valid = $derived(count !== null && count > 0 && amount <= 10000);
-  const selectedSize = $derived<PortionSize | null>(
-    choice === -1 ? (PORTION_SIZES.find((p) => Math.abs(amount - portionGrams(normalGrams, p.id)) < 0.6)?.id ?? null) : null,
-  );
+  /** La porzione a occhio che corrisponde alla quantità scritta (anche se scelta con un'altra misura). */
+  const selectedSize = $derived<PortionSize | null>(PORTION_SIZES.find((p) => Math.abs(amount - portionGrams(normalGrams, p.id)) < 0.6)?.id ?? null);
 
   function pickSize(size: PortionSize) {
     choice = -1;
     qty = fmtOne(portionGrams(normalGrams, size));
     void tapFeedback();
+  }
+
+  /** Cambiando misura la quantità resta (quasi) la stessa: 20 g diventano 2 cucchiai, e viceversa. Si arrotonda al decimo di porzione. */
+  function changeMeasure(next: number) {
+    const grams = amount;
+    const p = next >= 0 ? (food.portions[next] ?? null) : null;
+    choice = p ? next : -1;
+    if (grams > 0) qty = fmtOne(p ? Math.max(0.1, Math.round((grams / p.grams) * 10) / 10) : Math.round(grams * 10) / 10);
   }
   const n = $derived(scale(food.per100, amount));
   const split = $derived(macroSplit(n));
@@ -102,8 +101,9 @@
       brand: food.brand,
       unit: food.unit,
       amount: Math.round(amount * 10) / 10,
-      portionLabel: portion?.label ?? (simple && selectedSize ? `Porzione ${selectedSize}` : undefined),
-      portionCount: portion ? (count ?? undefined) : simple && selectedSize ? 1 : undefined,
+      // Senza una misura dell'alimento resta il nome della porzione a occhio: nel Diario si legge "Porzione abbondante · 14 g".
+      portionLabel: portion?.label ?? (selectedSize ? `Porzione ${selectedSize}` : undefined),
+      portionCount: portion ? (count ?? undefined) : selectedSize ? 1 : undefined,
       per100: { ...food.per100 },
       createdAt: entry?.createdAt ?? new Date().toISOString(),
     };
@@ -161,7 +161,8 @@
 
   const step = (delta: number) => {
     const c = count ?? 0;
-    const unitStep = portion ? 0.5 : food.unit === 'ml' ? 50 : 10;
+    // Passi piccoli per gli alimenti che si mangiano a pochi grammi (olio, formaggio grattugiato).
+    const unitStep = portion ? 0.5 : food.unit === 'ml' ? (normalGrams <= 50 ? 10 : 50) : normalGrams <= 30 ? 5 : 10;
     const next = Math.max(0, Math.round((c + delta * unitStep) * 10) / 10);
     qty = fmtOne(next);
   };
@@ -201,7 +202,7 @@
         {#if food.brand}<p class="brand">{food.brand}</p>{/if}
       </div>
       <div class="hero-amount">
-        <strong class="num" class:words={simple && !!selectedSize}>{simple && selectedSize ? `Porzione ${selectedSize}` : `${fmtOne(amount)} ${food.unit}`}</strong>
+        <strong class="num">{fmtOne(amount)} {food.unit}</strong>
         <span class="num">{fmtInt(n.kcal)} kcal</span>
       </div>
     </div>
@@ -220,7 +221,7 @@
   </div>
   <p class="note center">Quota delle calorie: proteine {split.protein}% · carboidrati {split.carbs}% · grassi {split.fat}%</p>
 
-  {#if extras.length && !simple}
+  {#if extras.length}
     <div class="list extras">
       {#each extras as x (x.label)}
         <div class="row static"><span class="grow">{x.label}</span><span class="end">{fmtG(x.value ?? 0)} g</span></div>
@@ -228,30 +229,35 @@
     </div>
   {/if}
 
-  <h4 class="section-title">{simple ? 'Quanto ne hai mangiato?' : 'Quantità'}</h4>
-  {#if simple}
-    <div class="sizes">
-      {#each PORTION_SIZES as p (p.id)}
-        <button class="size" aria-pressed={selectedSize === p.id} onclick={() => pickSize(p.id)}>
-          <span class="dots" aria-hidden="true">{p.id === 'piccola' ? '●' : p.id === 'normale' ? '●●' : '●●●'}</span>
-          {p.label}
-        </button>
-      {/each}
-    </div>
-    <p class="note">{HAND_GUIDE}</p>
-    <button class="btn btn-ghost btn-small more" onclick={() => (moreOptions = !moreOptions)}>
-      <Icon name={moreOptions ? 'chevronDown' : 'chevronRight'} size={16} /> Altre misure (grammi, fette, cucchiai…)
-    </button>
-  {/if}
-  {#if !simple || moreOptions}
-  <select class="input" bind:value={choice} aria-label="Unità">
-    <option value={-1}>{food.unit === 'ml' ? 'Millilitri (ml)' : 'Grammi (g)'}</option>
-    {#each food.portions as p, i (p.label)}
-      <option value={i}>{p.label}</option>
+  <h4 class="section-title">Quanto ne hai mangiato?</h4>
+  <!-- A occhio: tre porzioni con i loro grammi, così col tempo si impara quanto pesano. -->
+  <div class="sizes">
+    {#each PORTION_SIZES as p (p.id)}
+      <button class="size" aria-pressed={selectedSize === p.id} onclick={() => pickSize(p.id)}>
+        <span class="dots" aria-hidden="true">{p.id === 'piccola' ? '●' : p.id === 'normale' ? '●●' : '●●●'}</span>
+        {p.label}
+        <small class="num">{fmtOne(portionGrams(normalGrams, p.id))} {food.unit}</small>
+      </button>
     {/each}
-  </select>
+  </div>
+  <p class="note">{normal.estimated ? ESTIMATED_GUIDE : HAND_GUIDE}</p>
+  <!-- Oppure la quantità esatta: la misura qui, il numero nel riquadro in basso. -->
+  <label class="field measure">
+    <span>Misura esatta (il numero lo scrivi qui sotto)</span>
+    <select class="input" value={choice} onchange={(e) => changeMeasure(Number(e.currentTarget.value))}>
+      <option value={-1}>{food.unit === 'ml' ? 'Millilitri (ml)' : 'Grammi (g)'}</option>
+      {#each food.portions as p, i (p.label)}
+        <option value={i}>{p.label}</option>
+      {/each}
+    </select>
+  </label>
+  {#if !valid && count !== null}
+    <p class="note bad">Scrivi una quantità valida.</p>
+  {:else if n.kcal > CHECK_QUANTITY_KCAL}
+    <p class="note bad">
+      Sono tante calorie per un solo alimento: controlla la quantità{portion ? ` (stai contando le porzioni, non i ${food.unit === 'ml' ? 'millilitri' : 'grammi'})` : ''}.
+    </p>
   {/if}
-  {#if !valid && count !== null}<p class="note bad">Scrivi una quantità valida.</p>{/if}
 
   <h4 class="section-title">Pasto</h4>
   <div class="segmented" role="group" aria-label="Pasto">
@@ -274,14 +280,12 @@
   </div>
 
   {#snippet footer()}
-    {#if !simple || moreOptions}
     <div class="stepper">
       <button aria-label="Meno" onclick={() => step(-1)}><Icon name="minus" size={18} /></button>
       <input class="num" inputmode="decimal" bind:value={qty} aria-label="Quantità" disabled={!ready} />
       <span class="unit">{portion ? '×' : food.unit}</span>
       <button aria-label="Più" onclick={() => step(1)}><Icon name="plus" size={18} /></button>
     </div>
-    {/if}
     <button class="btn btn-primary go" disabled={!valid || !ready} onclick={save}>
       {entry ? 'Salva' : 'Aggiungi'} · {fmtInt(n.kcal)} kcal
     </button>
@@ -367,10 +371,6 @@
     font-size: 1.5rem;
     line-height: 1.15;
     overflow-wrap: anywhere;
-  }
-  /* "Porzione abbondante" è una scritta, non un numero: più piccola, così non fa a gara con il nome. */
-  .hero-amount strong.words {
-    font-size: 1.125rem;
   }
   .hero-amount span {
     font-size: 0.875rem;
@@ -479,7 +479,8 @@
     gap: 8px;
   }
   .size {
-    min-height: 64px;
+    min-height: 78px;
+    padding: 8px 2px;
     border-radius: 18px;
     border: 2px solid var(--border);
     background: var(--surface);
@@ -501,9 +502,12 @@
     letter-spacing: 2px;
     color: var(--accent-text);
   }
-  .more {
-    margin: 4px 0 8px;
-    color: var(--accent-text);
-    padding: 0 4px;
+  .size small {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+  .measure {
+    margin-top: 12px;
   }
 </style>

@@ -1,5 +1,17 @@
 # Novità
 
+## [0.8.0] - 2026-11-11
+
+- Una sola modalità: numeri e consigli sempre insieme, niente più interruttore.
+- Alimenti: Piccola, Normale, Abbondante con i grammi, più la quantità esatta.
+- Diario: carboidrati, proteine e grassi sempre in vista, con i consigli sotto.
+- In ogni pasto vedi le calorie sull'obiettivo e il pallino verde, giallo o rosso.
+- Nel Diario le porzioni a occhio mostrano anche i grammi ("Porzione abbondante · 14 g").
+- Foto AI: ingredienti e grammi già aperti, li nascondi con un tocco.
+- Se un alimento non indica la sua porzione, quella normale è stimata dalle calorie (l'app lo scrive).
+- Avviso se la quantità scritta dà più di 1500 kcal per un solo alimento.
+- Tolta la domanda "Conosci i valori nutrizionali?" all'inizio e la voce nel Profilo.
+
 ## [0.7.1] - 2026-11-11
 
 - Scheda dell'alimento: il nome e "Porzione abbondante" non si sovrappongono più.

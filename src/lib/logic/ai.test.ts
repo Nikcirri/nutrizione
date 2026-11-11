@@ -145,7 +145,7 @@ describe('AI: velocità', () => {
   });
 });
 
-describe('AI: modalità semplice', () => {
+describe('AI: porzione, perché e domande', () => {
   it('legge porzione, perché e domande (scarta quelle rotte)', () => {
     const meal = parseAiMeal(JSON.stringify({
       dish: 'Cotoletta', portion: 'Abbondante', why: 'Quasi metà arriva dalla frittura.',

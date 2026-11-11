@@ -13,7 +13,7 @@
   import { getAiKey, setAiKey } from '../lib/repo';
   import AiKeyForm from '../lib/ui/AiKeyForm.svelte';
   import { checkUpdateNow, installUpdate } from '../lib/state/update.svelte';
-  import { app, currentTargets, dismissSimpleIntro, initApp, sheets, updateSettings, weightForCalc } from '../lib/state/app.svelte';
+  import { app, currentTargets, initApp, sheets, updateSettings, weightForCalc } from '../lib/state/app.svelte';
   import { loadCigarettes } from '../lib/state/cigarettes.svelte';
   import { confirmDialog, showToast, withBusy } from '../lib/state/ui.svelte';
   import type { Settings } from '../lib/types';
@@ -156,25 +156,6 @@
     {/if}
   {/if}
 </section>
-
-<h3 class="section-title">Come vuoi vedere l’app</h3>
-<div class="list">
-  <label class="switch-row">
-    <span class="grow"
-      >Modalità semplice<span class="sub">Porzioni a occhio, colori e consigli in parole al posto di grammi e numeri.</span></span
-    >
-    <input
-      type="checkbox"
-      class="switch"
-      checked={prefs.simpleMode}
-      onchange={(e) => {
-        const on = (e.currentTarget as HTMLInputElement).checked;
-        set((s) => (s.prefs.simpleMode = on));
-        if (on) void dismissSimpleIntro();
-      }}
-    />
-  </label>
-</div>
 
 <h3 class="section-title">Chi sei</h3>
 <div class="card stack">

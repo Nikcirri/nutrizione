@@ -95,12 +95,18 @@ export function parseNum(s: string | number | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Testo della quantità: "150 g", "2 × Fetta (30 g)". */
+/**
+ * Testo della quantità: "150 g", "2 × Fetta (30 g)", "Porzione abbondante · 210 g".
+ * Se il nome della porzione non dice quanto pesa, i grammi si aggiungono in fondo:
+ * così chi sceglie "a occhio" vede sempre anche la quantità e impara a riconoscerla.
+ */
 export function amountLabel(e: Pick<DiaryEntry, 'amount' | 'unit' | 'portionLabel' | 'portionCount' | 'quick'>): string {
   if (e.quick) return '';
+  const grams = `${fmtOne(e.amount)} ${e.unit}`;
   if (e.portionLabel && e.portionCount) {
     const count = e.portionCount === 1 ? '' : `${fmtOne(e.portionCount)} × `;
-    return `${count}${e.portionLabel}`;
+    const label = `${count}${e.portionLabel}`;
+    return /\d/.test(e.portionLabel) ? label : `${label} · ${grams}`;
   }
-  return `${fmtOne(e.amount)} ${e.unit}`;
+  return grams;
 }

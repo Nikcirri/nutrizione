@@ -1,6 +1,7 @@
-// Modalità semplice: giudizi a colori, consigli in parole, idee per il prossimo pasto, porzioni a occhio.
+// Consigli che accompagnano i numeri: giudizi a colori (pallini), consigli in parole, idee per il
+// prossimo pasto, porzioni a occhio e spiegazioni. Servono a imparare le quantità mentre si usa l'app.
 import { MEAL_IDEAS, type MealIdea } from '../data/mealIdeas';
-import type { MealId, Nutrients } from '../types';
+import type { MealId, Nutrients, Unit } from '../types';
 import { fmtInt } from './nutrition';
 
 export type Light = 'green' | 'yellow' | 'red';
@@ -109,15 +110,38 @@ export function portionGrams(normalGrams: number, size: PortionSize): number {
   return Math.round(normalGrams * f);
 }
 
-/** Come si chiama a occhio una quantità rispetto alla porzione normale. */
-export function sizeFor(grams: number, normalGrams: number): PortionSize {
-  const r = normalGrams > 0 ? grams / normalGrams : 1;
-  if (r < 0.85) return 'piccola';
-  if (r > 1.2) return 'abbondante';
-  return 'normale';
+export interface NormalPortion {
+  grams: number;
+  /** Vero se l'alimento non indica la sua porzione e la quantità è stimata dalle calorie. */
+  estimated: boolean;
+}
+
+/**
+ * La porzione normale di un alimento: la prima che l'alimento indica. Se non ne indica (prodotti
+ * senza porzione in etichetta, alimenti creati a mano) si stima dalle calorie: più un alimento è
+ * calorico, più la porzione tipica è piccola. Meglio di un "100 g" fisso, che per olio, frutta secca
+ * o cioccolato insegnerebbe quantità sbagliate.
+ */
+export function normalPortion(portions: readonly { grams: number }[], kcalPer100: number, unit: Unit): NormalPortion {
+  const first = portions[0]?.grams;
+  if (first && first > 0) return { grams: first, estimated: false };
+  let grams: number;
+  if (kcalPer100 >= 700) grams = 10; // oli, burro
+  else if (unit === 'ml') grams = kcalPer100 >= 200 ? 30 : 200; // liquori, sciroppi, panna · bevande, latte
+  else if (kcalPer100 >= 400) grams = 30; // frutta secca, cioccolato, biscotti, patatine
+  else if (kcalPer100 >= 250) grams = 60; // pane, formaggi, salumi, dolci
+  else if (kcalPer100 >= 120) grams = 150; // carne, pesce, piatti pronti, pasta cotta
+  else grams = 200; // verdura, frutta, yogurt, zuppe
+  return { grams, estimated: true };
 }
 
 export const HAND_GUIDE = 'A occhio: carne o pesce come il palmo della mano, pasta o riso cotti come un pugno, olio e formaggi come un pollice.';
+
+/** Sopra queste calorie per un solo alimento la scheda invita a ricontrollare la quantità (di solito è un errore di battitura). */
+export const CHECK_QUANTITY_KCAL = 1500;
+
+/** Nota sotto le porzioni quando la porzione normale è stimata (vedi `normalPortion`). */
+export const ESTIMATED_GUIDE = 'Porzioni stimate dalle calorie: questo alimento non indica la sua porzione. Se la conosci, scrivi i grammi qui sotto.';
 
 // ---------- Spiegazioni al tocco ----------
 

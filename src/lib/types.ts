@@ -160,8 +160,6 @@ export interface Goals {
 }
 
 export interface Prefs {
-  /** Modalità semplice: porzioni a occhio, giudizi a colori e consigli in parole invece di grammi e numeri. */
-  simpleMode: boolean;
   /** Aggiunge all'obiettivo le calorie bruciate con l'attività. */
   addActivityKcal: boolean;
   glassMl: number;

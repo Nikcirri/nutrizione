@@ -23,7 +23,6 @@ export const DEFAULT_GOALS: Goals = {
 };
 
 export const DEFAULT_PREFS: Prefs = {
-  simpleMode: false,
   addActivityKcal: true,
   glassMl: 250,
   fastPlanHours: 16,
@@ -99,7 +98,6 @@ export function sanitizeSettings(raw: unknown, now: Date = new Date()): Settings
     manualWaterMl: Math.round(numIn(g.manualWaterMl, 500, 6000, d.goals.manualWaterMl)),
   };
   const prefs: Prefs = {
-    simpleMode: bool(pr.simpleMode, d.prefs.simpleMode),
     addActivityKcal: bool(pr.addActivityKcal, d.prefs.addActivityKcal),
     glassMl: Math.round(numIn(pr.glassMl, 50, 1000, d.prefs.glassMl)),
     fastPlanHours: Math.round(numIn(pr.fastPlanHours, 1, 72, d.prefs.fastPlanHours)),

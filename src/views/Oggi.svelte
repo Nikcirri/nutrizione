@@ -6,7 +6,7 @@
   import { dayBudget } from '../lib/logic/goals';
   import { amountLabel, entryNutrients, fmtInt, fmtLiters, sumEntries } from '../lib/logic/nutrition';
   import { mealForHour } from '../lib/logic/dates';
-  import { EXPLAIN, dayHints, dayVerdict, mealVerdict, nextMeal, nextMealAdvice, type Topic } from '../lib/logic/simple';
+  import { EXPLAIN, dayHints, dayVerdict, mealVerdict, nextMeal, nextMealAdvice, type Topic } from '../lib/logic/advice';
   import { isNative, tapFeedback } from '../lib/platform';
   import {
     activitiesFor,
@@ -19,7 +19,7 @@
     healthFor,
     previousDayWithMeal,
   } from '../lib/repo';
-  import { app, currentTargets, dismissSimpleIntro, sheets, updateSettings } from '../lib/state/app.svelte';
+  import { app, currentTargets, sheets, updateSettings } from '../lib/state/app.svelte';
   import { useLive } from '../lib/state/live.svelte';
   import { infoDialog, showToast, showUndoToast } from '../lib/state/ui.svelte';
   import { MEALS, type DiaryEntry, type MealId } from '../lib/types';
@@ -63,8 +63,7 @@
     { label: 'Fibre', topic: 'fibre' as Topic, value: eaten.fiber ?? 0, target: targets.fiber, color: 'var(--fiber)' },
   ]);
 
-  // ---------- Modalità semplice ----------
-  const simple = $derived(app.settings.prefs.simpleMode);
+  // ---------- Consigli: giudizio della giornata, suggerimenti e idee per il prossimo pasto ----------
   const verdict = $derived(dayVerdict(eaten.kcal, budget));
   const hints = $derived(
     dayHints({
@@ -92,16 +91,6 @@
 
   function explain(topic: Topic) {
     void infoDialog(EXPLAIN[topic].title, EXPLAIN[topic].text);
-  }
-
-  async function trySimple(on: boolean) {
-    await dismissSimpleIntro();
-    if (on) {
-      await updateSettings((s) => {
-        s.prefs.simpleMode = true;
-      });
-      showToast('Modalità semplice attiva: la cambi quando vuoi dal Profilo');
-    }
   }
 
   const MEAL_ICONS: Record<MealId, IconName> = { colazione: 'sun', pranzo: 'meal', cena: 'moon', spuntini: 'apple' };
@@ -243,17 +232,6 @@
   </div>
 </section>
 
-{#if app.simpleIntro}
-  <section class="card intro">
-    <strong>Novità: modalità semplice</strong>
-    <p>Per chi non conosce i valori: porzioni a occhio, colori e consigli in parole al posto di grammi e numeri.</p>
-    <div class="intro-actions">
-      <button class="btn btn-ghost btn-small" onclick={() => trySimple(false)}>No, grazie</button>
-      <button class="btn btn-primary btn-small" onclick={() => trySimple(true)}>Provala</button>
-    </div>
-  </section>
-{/if}
-
 <section class="summary">
   <Ring value={budget > 0 ? eaten.kcal / budget : 0} size={150} stroke={13} color="var(--ring-on-lime)" overColor="var(--over)" track="var(--ring-track-on-lime)">
     <span class="num remaining" class:over={remaining < 0}>{fmtInt(Math.abs(remaining))}</span>
@@ -272,31 +250,11 @@
       <span><i class="dot" style:background="var(--burn)"></i>Bruciate</span>
       <strong class="num">{fmtInt(burned)} <small>kcal</small></strong>
     </div>
-    {#if simple}
-      <button class="what" onclick={() => explain('calorie')}><Icon name="info" size={14} /> Cosa sono le calorie?</button>
-    {/if}
+    <button class="what" onclick={() => explain('calorie')}><Icon name="info" size={14} /> Cosa sono le calorie?</button>
   </div>
 </section>
 
-{#if simple}
-  <section class="card advice">
-    <p class="verdict">{lightEmoji(verdict.light)} {verdict.text}</p>
-    {#each hints as h (h)}
-      <p class="hint-line">💡 {h}</p>
-    {/each}
-    {#if advice && advice.ideas.length}
-      <div class="next">
-        <span class="next-title">Idee per {MEALS.find((m) => m.id === advice.meal)?.label.toLowerCase()}</span>
-        <p class="next-text">{advice.text}</p>
-        <ul>
-          {#each advice.ideas as idea (idea.id)}<li>{idea.name}</li>{/each}
-        </ul>
-      </div>
-    {:else if advice}
-      <p class="hint-line">{advice.text}</p>
-    {/if}
-  </section>
-{:else}
+<!-- I numeri (toccali per sapere cosa sono)… -->
 <div class="macro-grid">
   {#each macros as m (m.label)}
     <button class="card macro" onclick={() => explain(m.topic)} aria-label="{m.label}: cosa sono">
@@ -309,7 +267,25 @@
     </button>
   {/each}
 </div>
-{/if}
+
+<!-- …e i consigli in parole, sempre insieme: così i numeri si imparano a leggere. -->
+<section class="card advice">
+  <p class="verdict">{lightEmoji(verdict.light)} {verdict.text}</p>
+  {#each hints as h (h)}
+    <p class="hint-line">💡 {h}</p>
+  {/each}
+  {#if advice && advice.ideas.length}
+    <div class="next">
+      <span class="next-title">Idee per {MEALS.find((m) => m.id === advice.meal)?.label.toLowerCase()}</span>
+      <p class="next-text">{advice.text}</p>
+      <ul>
+        {#each advice.ideas as idea (idea.id)}<li>{idea.name}</li>{/each}
+      </ul>
+    </div>
+  {:else if advice}
+    <p class="hint-line">{advice.text}</p>
+  {/if}
+</section>
 
 <div class="mini-grid">
   <div class="card mini">
@@ -355,17 +331,15 @@
 {#each MEALS as meal (meal.id)}
   {@const list = entries.current.filter((e) => e.meal === meal.id)}
   {@const total = sumEntries(list)}
+  {@const mealTarget = budget * meal.share}
+  {@const mv = mealVerdict(total.kcal, mealTarget)}
   <section class="card meal">
     <div class="meal-head">
       <span class="meal-icon"><Icon name={MEAL_ICONS[meal.id]} size={22} /></span>
       <div class="grow">
         <h2>{meal.label}</h2>
-        {#if simple}
-          {@const mv = mealVerdict(total.kcal, budget * meal.share)}
-          <span class="num"><Icon name="flame" size={14} /> {fmtInt(total.kcal)} kcal{mv ? ` · ${lightEmoji(mv.light)} ${mv.text}` : ''}</span>
-        {:else}
-          <span class="num"><Icon name="flame" size={14} /> {fmtInt(total.kcal)} / {fmtInt(targets.kcal * meal.share)} kcal</span>
-        {/if}
+        <span class="num"><Icon name="flame" size={14} /> {fmtInt(total.kcal)} / {fmtInt(mealTarget)} kcal</span>
+        {#if mv}<span class="meal-verdict">{lightEmoji(mv.light)} {mv.text}</span>{/if}
       </div>
       <button class="plus" aria-label="Aggiungi a {meal.label}" onclick={() => (sheets.addFood = { date: app.date, meal: meal.id })}>
         <Icon name="plus" />
@@ -378,11 +352,7 @@
             <span class="grow">
               <span class="title">{e.name}</span>
               <span class="sub">
-                {#if simple}
-                  {[e.brand, e.portionLabel ? amountLabel(e) : e.ai ? 'stimato con l’AI' : ''].filter(Boolean).join(' · ') || (e.quick ? 'Calorie veloci' : 'porzione scelta')}
-                {:else}
-                  {[e.brand, amountLabel(e)].filter(Boolean).join(' · ') || 'Calorie veloci'}
-                {/if}
+                {[e.brand, amountLabel(e), e.ai ? 'stimato con l’AI' : ''].filter(Boolean).join(' · ') || 'Calorie veloci'}
               </span>
             </span>
             <span class="kcal num">{fmtInt(entryNutrients(e).kcal)}<small> kcal</small></span>
@@ -672,21 +642,6 @@
     padding: 4px 0;
     cursor: pointer;
   }
-  .intro {
-    margin-bottom: 12px;
-    border: 2px solid var(--accent);
-  }
-  .intro p {
-    margin: 6px 0 10px;
-    font-size: 0.875rem;
-    line-height: 1.45;
-    color: var(--text-muted);
-  }
-  .intro-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-  }
   .advice {
     margin-top: 12px;
   }
@@ -852,6 +807,12 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    margin-top: 2px;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+  }
+  .meal-verdict {
+    display: block;
     margin-top: 2px;
     font-size: 0.8125rem;
     color: var(--text-muted);

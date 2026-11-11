@@ -17,22 +17,12 @@ export const app = $state({
   today: todayKey(),
   /** Ultima pesata (null se non ce ne sono). */
   currentWeight: null as number | null,
-  /** Mostrare la scheda che presenta la modalità semplice (una volta sola). */
-  simpleIntro: false,
 });
 
 export async function initApp(): Promise<void> {
   app.settings = await loadSettings(db);
   await refreshWeight();
-  const intro = await db.kv.get('simpleIntroSeen').catch(() => undefined);
-  app.simpleIntro = app.settings.onboarded && !app.settings.prefs.simpleMode && !intro;
   app.ready = true;
-}
-
-/** La scheda della modalità semplice non si mostra più. */
-export async function dismissSimpleIntro(): Promise<void> {
-  app.simpleIntro = false;
-  await db.kv.put({ key: 'simpleIntroSeen', value: true });
 }
 
 export async function refreshWeight(): Promise<void> {
