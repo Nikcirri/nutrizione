@@ -12,6 +12,9 @@
 - Logica in funzioni pure dentro `src/lib/logic`, con test Vitest. Il database passa da `src/lib/repo.ts` (test con fake-indexeddb in `src/lib/repo.test.ts`).
 - Grafica: tema verde lime (variabili in `src/app.css`), schede bianche molto arrotondate, carattere Outfit incluso. Il colore dei grafici è `--chart` (verificato per il contrasto).
   Nel tema scuro sfondi e schede sono grigio/nero neutri (l'utente non vuole la sfumatura verde): il verde resta solo su pulsanti e indicatori.
+- Scritte che non si sovrappongono (l'utente ci tiene): mai due testi affiancati che non possono andare a capo. I nomi degli alimenti possono essere molto lunghi: nelle righe "nome + valore" usa `flex-wrap` e `overflow-wrap: anywhere` sul nome (vedi `.hero-row` in `FoodDetailSheet.svelte`).
+  Dopo ogni modifica alla grafica esegui `scripts/overlap-check.py` (istruzioni in cima al file) a 384 e 360 di larghezza, in modalità semplice e normale: gira da solo tutte le schermate con nomi lunghi e segnala scritte sovrapposte, fuori schermo o fuori dal loro riquadro. Non vede i widget della schermata Home né le scritte contro i disegni (barre, icone): quelli vanno guardati negli screenshot.
+- Nei fogli la `request` diventa null appena il foglio si chiude: leggi `request.date` e simili PRIMA di chiamare `close()` (errore già capitato in AiMealSheet e CreateFoodSheet).
 - Implementa tutto per intero: niente codice troncato, niente `TODO`, niente funzioni vuote o segnaposto.
 - Fine di ogni modifica, sempre in quest'ordine:
   1. `npm run verify` (controllo tipi + test + build) deve passare;

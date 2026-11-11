@@ -201,7 +201,7 @@
         {#if food.brand}<p class="brand">{food.brand}</p>{/if}
       </div>
       <div class="hero-amount">
-        <strong class="num">{simple && selectedSize ? `Porzione ${selectedSize}` : `${fmtOne(amount)} ${food.unit}`}</strong>
+        <strong class="num" class:words={simple && !!selectedSize}>{simple && selectedSize ? `Porzione ${selectedSize}` : `${fmtOne(amount)} ${food.unit}`}</strong>
         <span class="num">{fmtInt(n.kcal)} kcal</span>
       </div>
     </div>
@@ -331,20 +331,25 @@
     opacity: 1;
     color: #e09a12;
   }
+  /* Nome a sinistra e quantità a destra; se insieme non ci stanno (nomi lunghi, "Porzione abbondante")
+     la quantità va a capo sotto il nome, così le due scritte non si sovrappongono mai. */
   .hero-row {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-end;
-    gap: 12px;
+    gap: 8px 12px;
     margin-top: 18px;
   }
   .hero-row .grow {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
+    max-width: 100%;
   }
   h3 {
     margin: 0;
     font-size: 1.5rem;
     line-height: 1.15;
+    overflow-wrap: anywhere;
   }
   .brand {
     margin: 4px 0 0;
@@ -353,11 +358,19 @@
   }
   .hero-amount {
     text-align: right;
-    flex: none;
+    flex: 0 1 auto;
+    max-width: 100%;
+    margin-left: auto;
   }
   .hero-amount strong {
     display: block;
     font-size: 1.5rem;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+  /* "Porzione abbondante" è una scritta, non un numero: più piccola, così non fa a gara con il nome. */
+  .hero-amount strong.words {
+    font-size: 1.125rem;
   }
   .hero-amount span {
     font-size: 0.875rem;
@@ -375,6 +388,8 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    /* Lo spazio resta anche quando la colonna colorata è al massimo: non tocca mai la scritta sopra. */
+    gap: 8px;
     padding: 10px 6px 6px;
     text-align: center;
   }

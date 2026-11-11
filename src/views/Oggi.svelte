@@ -379,7 +379,7 @@
               <span class="title">{e.name}</span>
               <span class="sub">
                 {#if simple}
-                  {[e.brand, e.portionLabel ? amountLabel(e) : e.ai ? 'stimato con la foto' : ''].filter(Boolean).join(' · ') || (e.quick ? 'Calorie veloci' : 'porzione scelta')}
+                  {[e.brand, e.portionLabel ? amountLabel(e) : e.ai ? 'stimato con l’AI' : ''].filter(Boolean).join(' · ') || (e.quick ? 'Calorie veloci' : 'porzione scelta')}
                 {:else}
                   {[e.brand, amountLabel(e)].filter(Boolean).join(' · ') || 'Calorie veloci'}
                 {/if}

@@ -715,6 +715,16 @@
   .item.off .grow {
     opacity: 0.45;
   }
+  /* I nomi degli ingredienti si devono leggere: vanno a capo (fino a due righe) invece di essere tagliati. */
+  .item .title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+  }
   .check {
     width: 22px;
     height: 22px;

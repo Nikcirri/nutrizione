@@ -92,8 +92,10 @@
       };
       await saveFood(db, food);
       showToast(edit ? 'Valori salvati' : 'Alimento creato');
+      // Giorno e pasto vanno letti prima di chiudere: chiudendo, la richiesta di questo foglio sparisce.
+      const { date, meal } = request;
       close();
-      if (request.date && request.meal) sheets.detail = { food, date: request.date, meal: request.meal };
+      if (date && meal) sheets.detail = { food, date, meal };
     } catch (e) {
       reportError(e);
     } finally {

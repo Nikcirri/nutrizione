@@ -1,5 +1,14 @@
 # Novità
 
+## [0.7.1] - 2026-11-11
+
+- Scheda dell'alimento: il nome e "Porzione abbondante" non si sovrappongono più.
+- "Crea alimento": tolto l'errore dopo il salvataggio, ora si apre subito la scheda.
+- Foto AI: i nomi lunghi degli ingredienti vanno a capo invece di essere tagliati.
+- Valori nutrizionali: la colonna colorata non tocca più la scritta sopra.
+- Diario: "stimato con l'AI" al posto di "stimato con la foto".
+- Nuovo controllo automatico delle scritte sovrapposte su tutte le schermate.
+
 ## [0.7.0] - 2026-11-11
 
 - Widget anche in formato 2×1: tienilo premuto e trascina il bordo verso l'alto.
