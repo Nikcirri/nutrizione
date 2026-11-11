@@ -1,5 +1,14 @@
 # Novità
 
+## [0.7.0] - 2026-11-11
+
+- Widget anche in formato 2×1: tienilo premuto e trascina il bordo verso l'alto.
+- Nuova schermata Sigarette con grafico e andamento: si apre toccando il widget.
+- I widget passano al giorno nuovo da soli, senza dover aprire l'app.
+- Nella schermata Sigarette puoi correggere anche i giorni passati.
+- In Progressi compare la scheda Sigarette; i conteggi entrano nel backup.
+- Grafici: tolto lo spazio vuoto in fondo alla pagina con "30 giorni".
+
 ## [0.6.0] - 2026-11-10
 
 - Nuovo widget "Calorie rimaste" per la schermata Home, con il + per aggiungere un pasto.
