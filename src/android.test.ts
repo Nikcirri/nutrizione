@@ -66,6 +66,8 @@ const REMOTE_VIEWS = ['LinearLayout', 'FrameLayout', 'RelativeLayout', 'TextView
 describe('widget della schermata Home', () => {
   const manifest = read('../android/app/src/main/AndroidManifest.xml');
   const widgets = ['calories', 'cigarettes'];
+  /** Ogni widget ha due disegni: quello normale e quello basso (2×1). */
+  const layouts = widgets.flatMap((w) => [`widget_${w}`, `widget_${w}_small`]);
 
   it('il manifest dichiara i due widget e il ricevitore dei pulsanti', () => {
     expect(manifest).toContain('android:name=".widgets.CaloriesWidget"');
@@ -78,17 +80,20 @@ describe('widget della schermata Home', () => {
     for (const w of widgets) {
       const info = read(`${RES}/xml/widget_${w}_info.xml`);
       expect(info).toContain(`android:initialLayout="@layout/widget_${w}"`);
-      expect(info).toContain('android:updatePeriodMillis="0"'); // nessun risveglio a tempo del telefono
-      expect(existsSync(new URL(`${RES}/layout/widget_${w}.xml`, import.meta.url))).toBe(true);
+      // Riserva per il cambio del giorno: Android ridisegna il widget ogni 30 minuti (il minimo ammesso).
+      expect(info).toContain('android:updatePeriodMillis="1800000"');
+      // Si può abbassare fino a una riga (2×1).
+      expect(info).toContain('android:minResizeHeight="40dp"');
     }
+    for (const l of layouts) expect(existsSync(new URL(`${RES}/layout/${l}.xml`, import.meta.url)), l).toBe(true);
   });
 
   it('i layout usano solo viste ammesse nei widget', () => {
-    for (const w of widgets) {
-      const xml = read(`${RES}/layout/widget_${w}.xml`).replace(/<!--[\s\S]*?-->/g, '');
+    for (const l of layouts) {
+      const xml = read(`${RES}/layout/${l}.xml`).replace(/<!--[\s\S]*?-->/g, '');
       const tags = [...xml.matchAll(/<([A-Za-z.]+)[\s>]/g)].map((m) => m[1]!);
-      expect(tags.filter((t) => !REMOTE_VIEWS.includes(t))).toEqual([]);
-      expect(xml).toContain('android:id="@android:id/background"');
+      expect(tags.filter((t) => !REMOTE_VIEWS.includes(t)), l).toEqual([]);
+      expect(xml, l).toContain('android:id="@android:id/background"');
     }
   });
 
@@ -98,13 +103,13 @@ describe('widget della schermata Home', () => {
       .filter((f) => f.endsWith('.java'))
       .map((f) => readFileSync(new URL(f, dir), 'utf8'))
       .join('\n');
-    const layouts = widgets.map((w) => read(`${RES}/layout/widget_${w}.xml`)).join('\n');
+    const allLayouts = layouts.map((l) => read(`${RES}/layout/${l}.xml`)).join('\n');
     const strings = read(`${RES}/values/strings.xml`);
     const missing: string[] = [];
     for (const [, kind, name] of java.matchAll(/(?<![.\w])R\.(id|string|layout)\.(\w+)/g)) {
       const ok =
         kind === 'id'
-          ? layouts.includes(`android:id="@+id/${name}"`)
+          ? allLayouts.includes(`android:id="@+id/${name}"`)
           : kind === 'string'
             ? strings.includes(`<string name="${name}">`)
             : existsSync(new URL(`${RES}/layout/${name}.xml`, import.meta.url));
@@ -113,9 +118,17 @@ describe('widget della schermata Home', () => {
     expect(missing).toEqual([]);
   });
 
+  it('il disegno basso ha gli stessi pulsanti di quello normale', () => {
+    // Il codice Java imposta gli stessi nomi su tutti e due i disegni: quelli dei pulsanti devono esserci sempre.
+    const ids = (l: string) => new Set([...read(`${RES}/layout/${l}.xml`).matchAll(/android:id="@\+id\/(\w+)"/g)].map((m) => m[1]!));
+    expect([...ids('widget_calories_small')].sort()).toEqual(['cal_add', 'cal_bar', 'cal_label', 'cal_value']);
+    expect([...ids('widget_calories')].sort()).toEqual(['cal_add', 'cal_bar', 'cal_detail', 'cal_label', 'cal_value']);
+    expect([...ids('widget_cigarettes_small')].sort()).toEqual([...ids('widget_cigarettes')].sort());
+  });
+
   it('colori, misure e disegni usati dai widget esistono (anche nel tema scuro)', () => {
     const files = [
-      ...widgets.map((w) => `${RES}/layout/widget_${w}.xml`),
+      ...layouts.map((l) => `${RES}/layout/${l}.xml`),
       ...readdirSync(new URL(`${RES}/drawable/`, import.meta.url))
         .filter((f) => f.includes('widget'))
         .map((f) => `${RES}/drawable/${f}`),

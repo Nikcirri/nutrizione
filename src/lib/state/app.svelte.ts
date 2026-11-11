@@ -92,4 +92,6 @@ export const sheets = $state({
   activity: null as { date: string } | null,
   weight: null as { date: string } | null,
   myFoods: false,
+  /** Schermata del contatore di sigarette (si apre dal widget o dai Progressi). */
+  cigarettes: false,
 });

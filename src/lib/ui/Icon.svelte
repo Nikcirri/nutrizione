@@ -44,6 +44,10 @@
     sparkles: 'M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z',
     key: 'M8 11a4 4 0 1 0 0 8a4 4 0 1 0 0-8zM10.8 12.2L19 4M16 7l2.5 2.5M14 9l2 2',
     scan: 'M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8',
+    cigarette: 'M3 13.5h14v4H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1zM6.8 13.5v4M20 13.5h1a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-1zM17.4 10.6c0-2.2-2-2.3-2-4.6M21 10.6c0-2.2-2-2.3-2-4.6',
+    trendUp: 'M3 17l6-6 4 4 8-8M15 7h6v6',
+    trendDown: 'M3 7l6 6 4-4 8 8M15 17h6v-6',
+    trendFlat: 'M4 12h16M15 7l5 5-5 5',
   } as const;
 
   export type IconName = keyof typeof PATHS;

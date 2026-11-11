@@ -3,7 +3,9 @@ package com.nikcirri.nutrizione.widgets;
 import android.content.Context;
 import android.content.SharedPreferences;
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Dati dei widget, salvati sul telefono fuori dal database dell'app: così i widget funzionano
@@ -20,8 +22,8 @@ final class WidgetStore {
     private static final String CAL_BURNED = "cal_burned";
     private static final String CAL_REMAINING = "cal_remaining";
     private static final String CIG_PREFIX = "cig_";
-    /** Oltre questo numero di giorni i conteggi vecchi delle sigarette si cancellano. */
-    private static final int KEEP_DAYS = 400;
+    /** Oltre questo numero di giorni (circa 3 anni) i conteggi vecchi delle sigarette si cancellano. */
+    private static final int KEEP_DAYS = 1100;
     private static final int MAX_CIGARETTES = 999;
 
     private WidgetStore() {}
@@ -83,14 +85,53 @@ final class WidgetStore {
         return prefs(context).getInt(CIG_PREFIX + today(), 0);
     }
 
-    /** Aggiunge o toglie sigarette a oggi (mai sotto zero) e restituisce il nuovo numero. */
-    static int changeCigarettes(Context context, int delta) {
+    /** Vero se il testo è un giorno valido AAAA-MM-GG e non è nel futuro. */
+    static boolean isPastOrToday(String date) {
+        if (date == null) return false;
+        try {
+            return !LocalDate.parse(date).isAfter(LocalDate.now());
+        } catch (DateTimeParseException e) {
+            return false;
+        }
+    }
+
+    private static int clampCigarettes(int value) {
+        return Math.max(0, Math.min(MAX_CIGARETTES, value));
+    }
+
+    /** Aggiunge o toglie sigarette a un giorno (mai sotto zero) e restituisce il nuovo numero. */
+    static int changeCigarettes(Context context, String date, int delta) {
         SharedPreferences p = prefs(context);
-        String key = CIG_PREFIX + today();
-        int value = Math.max(0, Math.min(MAX_CIGARETTES, p.getInt(key, 0) + delta));
+        String key = CIG_PREFIX + date;
+        int value = clampCigarettes(p.getInt(key, 0) + delta);
         // commit: il numero è salvato prima che il widget venga ridisegnato, anche se Android chiude subito il processo.
         p.edit().putInt(key, value).commit();
         return value;
+    }
+
+    /** Tutti i conteggi salvati, dal giorno più vecchio (per la schermata dell'app e per il backup). */
+    static Map<String, Integer> allCigarettes(Context context) {
+        Map<String, Integer> days = new TreeMap<>();
+        for (Map.Entry<String, ?> entry : prefs(context).getAll().entrySet()) {
+            String key = entry.getKey();
+            if (key.startsWith(CIG_PREFIX) && entry.getValue() instanceof Integer) {
+                days.put(key.substring(CIG_PREFIX.length()), (Integer) entry.getValue());
+            }
+        }
+        return days;
+    }
+
+    /** Sostituisce tutti i conteggi con quelli dati (ripristino di un backup). */
+    static void replaceCigarettes(Context context, Map<String, Integer> days) {
+        SharedPreferences p = prefs(context);
+        SharedPreferences.Editor editor = p.edit();
+        for (String key : p.getAll().keySet()) {
+            if (key.startsWith(CIG_PREFIX)) editor.remove(key);
+        }
+        for (Map.Entry<String, Integer> entry : days.entrySet()) {
+            if (isPastOrToday(entry.getKey())) editor.putInt(CIG_PREFIX + entry.getKey(), clampCigarettes(entry.getValue()));
+        }
+        editor.commit();
     }
 
     /** Cancella i conteggi delle sigarette più vecchi di KEEP_DAYS giorni. */

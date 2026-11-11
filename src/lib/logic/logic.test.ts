@@ -317,11 +317,18 @@ describe('backup', () => {
     health: [],
     fasts: [],
     dishes: [],
+    cigarettes: { '2026-11-09': 7, '2026-11-10': 5, rotta: 3 },
   };
   it('andata e ritorno, scartando le voci rotte', () => {
     const back = parseBackup(makeBackup(data, '0.1.0'));
     expect(back.entries).toHaveLength(1);
     expect(back.water[0]?.ml).toBe(500);
+    expect(back.cigarettes).toEqual({ '2026-11-09': 7, '2026-11-10': 5 });
+  });
+  it('un backup vecchio senza sigarette non tocca il contatore', () => {
+    const old = JSON.parse(makeBackup(data, '0.5.0')) as { data: Record<string, unknown> };
+    delete old.data.cigarettes;
+    expect(parseBackup(JSON.stringify(old)).cigarettes).toBeNull();
   });
   it('rifiuta file non validi o troppo nuovi', () => {
     expect(() => parseBackup('ciao')).toThrow(BackupError);

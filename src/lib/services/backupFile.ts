@@ -5,10 +5,11 @@ import { db } from '../db';
 import { backupFileName, makeBackup, parseBackup, type BackupData } from '../logic/backup';
 import { APP_VERSION, isNative } from '../platform';
 import { exportAll, importAll } from '../repo';
+import { cigaretteDays, replaceCigarettes } from './widgets';
 
 /** Crea il backup e apre "Condividi" (Drive, email, WhatsApp…). false se si chiude senza scegliere. */
 export async function shareBackup(): Promise<boolean> {
-  const text = makeBackup(await exportAll(db), APP_VERSION);
+  const text = makeBackup({ ...(await exportAll(db)), cigarettes: await cigaretteDays() }, APP_VERSION);
   const name = backupFileName();
   if (!isNative()) {
     const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
@@ -37,4 +38,6 @@ export async function readBackupFile(file: File): Promise<BackupData> {
 
 export async function restoreBackup(data: BackupData): Promise<void> {
   await importAll(db, data);
+  // I backup vecchi non hanno le sigarette: in quel caso il contatore resta com'è.
+  if (data.cigarettes) await replaceCigarettes(data.cigarettes);
 }

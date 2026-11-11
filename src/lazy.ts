@@ -15,6 +15,7 @@ export const load = {
   quickAdd: () => import('./views/sheets/QuickAddSheet.svelte'),
   activity: () => import('./views/sheets/ActivitySheet.svelte'),
   weight: () => import('./views/sheets/WeightSheet.svelte'),
+  cigarettes: () => import('./views/sheets/CigarettesSheet.svelte'),
 };
 
 /** Prepara in anticipo tutte le parti, quando il telefono non ha altro da fare. */

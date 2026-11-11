@@ -14,6 +14,7 @@
   import AiKeyForm from '../lib/ui/AiKeyForm.svelte';
   import { checkUpdateNow, installUpdate } from '../lib/state/update.svelte';
   import { app, currentTargets, dismissSimpleIntro, initApp, sheets, updateSettings, weightForCalc } from '../lib/state/app.svelte';
+  import { loadCigarettes } from '../lib/state/cigarettes.svelte';
   import { confirmDialog, showToast, withBusy } from '../lib/state/ui.svelte';
   import type { Settings } from '../lib/types';
   import Icon from '../lib/ui/Icon.svelte';
@@ -95,6 +96,7 @@
       if (!ok) return;
       await withBusy('Ripristino i dati…', () => restoreBackup(data));
       await initApp();
+      void loadCigarettes();
       showToast('Backup ripristinato');
     } catch (e) {
       reportError(e);

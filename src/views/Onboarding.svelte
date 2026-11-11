@@ -7,6 +7,7 @@
   import { setWeight } from '../lib/repo';
   import { readBackupFile, restoreBackup } from '../lib/services/backupFile';
   import { app, dismissSimpleIntro, initApp, refreshWeight, updateSettings } from '../lib/state/app.svelte';
+  import { loadCigarettes } from '../lib/state/cigarettes.svelte';
   import { confirmDialog, withBusy } from '../lib/state/ui.svelte';
   import type { Profile } from '../lib/types';
   import Icon from '../lib/ui/Icon.svelte';
@@ -65,6 +66,7 @@
       if (!ok) return;
       await withBusy('Ripristino i dati…', () => restoreBackup(data));
       await initApp();
+      void loadCigarettes();
     } catch (e) {
       reportError(e);
     }

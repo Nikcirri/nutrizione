@@ -11,13 +11,15 @@
     <string name="widget_calories_title">Calorie</string>
     <string name="widget_calories_left">kcal rimaste</string>
     <string name="widget_calories_over">kcal in più</string>
+    <string name="widget_calories_left_detail">kcal rimaste · %1$d di %2$d</string>
+    <string name="widget_calories_over_detail">kcal in più · %1$d di %2$d</string>
     <string name="widget_calories_open">Apri l’app per iniziare</string>
     <string name="widget_calories_detail">%1$d di %2$d kcal</string>
     <string name="widget_calories_detail_wide">Mangiate %1$d · Obiettivo %2$d</string>
     <string name="widget_calories_detail_wide_burned">Mangiate %1$d · Bruciate %2$d · Obiettivo %3$d</string>
     <string name="widget_add_meal">Aggiungi un pasto</string>
     <string name="widget_cig_name">Sigarette</string>
-    <string name="widget_cig_desc">Conta le sigarette di oggi con + e −. A mezzanotte riparte da zero.</string>
+    <string name="widget_cig_desc">Conta le sigarette di oggi con + e −. Toccalo per vedere l’andamento nell’app.</string>
     <string name="widget_cig_title">Oggi</string>
     <string name="widget_cig_count">%1$d sigarette oggi</string>
     <string name="widget_cig_plus">Aggiungi una sigaretta</string>

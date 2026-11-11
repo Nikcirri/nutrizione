@@ -5,8 +5,9 @@
   import { startLiveHealth, syncHealthDay } from './lib/healthSync';
   import { mealForHour } from './lib/logic/dates';
   import { onBackButton, onResume, tapFeedback } from './lib/platform';
-  import { onAddMealFromWidget } from './lib/services/widgets';
+  import { onWidgetAction, type WidgetAction } from './lib/services/widgets';
   import { app, initApp, sheets, tickToday, type Tab } from './lib/state/app.svelte';
+  import { loadCigarettes } from './lib/state/cigarettes.svelte';
   import { announceNewVersion, installUpdate, refreshUpdate, resumeUpdate, update } from './lib/state/update.svelte';
   import { closeTopOverlay, showToast } from './lib/state/ui.svelte';
   import { useWidgetSync } from './lib/widgetSync.svelte';
@@ -95,10 +96,14 @@
     sheets.addFood = { date, meal };
   }
 
-  /** Il + del widget "Calorie": apre l'app direttamente sul menu Aggiungi di oggi. */
-  function addMealFromWidget() {
+  /**
+   * App aperta da un widget: il + delle calorie apre il menu Aggiungi di oggi,
+   * il widget delle sigarette apre la sua schermata. Gli altri fogli aperti si chiudono.
+   */
+  function openFromWidget(action: WidgetAction) {
     if (!app.settings.onboarded) return;
     tickToday();
+    sheets.addFood = null;
     sheets.aiMeal = null;
     sheets.detail = null;
     sheets.createFood = null;
@@ -106,6 +111,12 @@
     sheets.activity = null;
     sheets.weight = null;
     sheets.myFoods = false;
+    sheets.cigarettes = false;
+    if (action === 'cigarettes') {
+      void loadCigarettes();
+      sheets.cigarettes = true;
+      return;
+    }
     app.tab = 'oggi';
     app.date = app.today;
     sheets.addFood = { date: app.today, meal: mealForHour(new Date().getHours()) };
@@ -115,7 +126,8 @@
     initApp()
       .then(async () => {
         preloadAll();
-        onAddMealFromWidget(addMealFromWidget);
+        onWidgetAction(openFromWidget);
+        void loadCigarettes();
         await announceNewVersion().catch(() => undefined);
         if (app.settings.onboarded) await refreshUpdate();
       })
@@ -135,6 +147,8 @@
     });
     onResume(() => {
       tickToday();
+      // Le sigarette possono essere cambiate dal widget mentre l'app era in background.
+      void loadCigarettes();
       void resumeUpdate();
       if (app.settings.onboarded) void refreshUpdate();
       if (app.settings.prefs.healthConnected) {
@@ -229,6 +243,7 @@
   {#if sheets.quickAdd}{#await load.quickAdd() then m}<m.default request={sheets.quickAdd} />{/await}{/if}
   {#if sheets.activity}{#await load.activity() then m}<m.default date={sheets.activity.date} />{/await}{/if}
   {#if sheets.weight}{#await load.weight() then m}<m.default date={sheets.weight.date} />{/await}{/if}
+  {#if sheets.cigarettes}{#await load.cigarettes() then m}<m.default />{/await}{/if}
 {/if}
 
 <BusyOverlay />

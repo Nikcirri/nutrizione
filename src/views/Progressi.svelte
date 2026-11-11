@@ -1,10 +1,12 @@
 <script lang="ts">
   import { db } from '../lib/db';
+  import { averagePerDay, series } from '../lib/logic/cigarettes';
   import { addDays, lastDays, shortDate, weekdayLetter } from '../lib/logic/dates';
   import { bmi, bmiLabel, weeksToTarget } from '../lib/logic/goals';
   import { fmtInt, fmtOne, sumEntries } from '../lib/logic/nutrition';
   import { allWeights, deleteWeight, entriesBetween, setWeight } from '../lib/repo';
   import { app, currentTargets, refreshWeight, sheets, weightForCalc } from '../lib/state/app.svelte';
+  import { cig } from '../lib/state/cigarettes.svelte';
   import { useLive } from '../lib/state/live.svelte';
   import { showUndoToast } from '../lib/state/ui.svelte';
   import type { DiaryEntry, WeightEntry } from '../lib/types';
@@ -74,6 +76,12 @@
   }
 
   const pct = (v: number, t: number) => (t > 0 ? Math.round((v / t) * 100) : 0);
+
+  // Sigarette: la scheda compare solo se il contatore (widget) è stato usato almeno una volta.
+  const hasCig = $derived(Object.keys(cig.days).length > 0);
+  const cigToday = $derived(cig.days[app.today] ?? 0);
+  // Media degli ultimi 7 giorni finiti (oggi escluso), come nella schermata Sigarette.
+  const cigAvg = $derived(averagePerDay(series(cig.days, app.today, 8), app.today));
 </script>
 
 <header class="top">
@@ -172,6 +180,19 @@
 {/if}
 <p class="note">L’IMC è un’indicazione generale: non tiene conto di muscoli, età e corporatura.</p>
 
+{#if hasCig}
+  <button class="card cig" onclick={() => (sheets.cigarettes = true)}>
+    <span class="cig-icon"><Icon name="cigarette" /></span>
+    <span class="grow">
+      <span class="label">Sigarette</span>
+      <span class="sub num">
+        Oggi {fmtInt(cigToday)}{cigAvg === null ? '' : ` · media ${fmtOne(cigAvg)} al giorno`}
+      </span>
+    </span>
+    <Icon name="chevronRight" />
+  </button>
+{/if}
+
 <style>
   .top {
     margin: 4px 0 14px;
@@ -246,6 +267,27 @@
     font-size: 0.8125rem;
     font-weight: 400;
     color: var(--text-muted);
+  }
+  .cig {
+    width: 100%;
+    margin-top: 12px;
+    border: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .cig-icon {
+    width: 44px;
+    height: 44px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--surface-2);
+    display: grid;
+    place-items: center;
   }
   .weight {
     margin-top: 12px;

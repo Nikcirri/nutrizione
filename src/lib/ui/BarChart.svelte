@@ -7,21 +7,43 @@
     label: string;
     value: number;
     title: string;
+    /** Testo sotto il grafico quando il valore è zero (se manca: `emptyText`). */
+    empty?: string;
   }
 
   let {
     items,
     goal = null,
+    goalCaption,
     unit,
+    unitOne,
+    emptyText = 'niente registrato',
+    minScale = 100,
     selected = $bindable(items.length - 1),
     height = 190,
-  }: { items: Item[]; goal?: number | null; unit: string; selected?: number; height?: number } = $props();
+  }: {
+    items: Item[];
+    /** Linea di riferimento orizzontale (obiettivo o media). */
+    goal?: number | null;
+    /** Scritta sulla linea di riferimento; se manca: "obiettivo" e il numero. */
+    goalCaption?: string;
+    unit: string;
+    /** Unità al singolare, per il valore 1 (es. "sigaretta"). */
+    unitOne?: string;
+    emptyText?: string;
+    /** Altezza minima della scala: evita colonne enormi quando i valori sono piccoli. */
+    minScale?: number;
+    selected?: number;
+    height?: number;
+  } = $props();
+
+  const unitFor = (v: number) => (v === 1 && unitOne ? unitOne : unit);
 
   let width = $state(320);
   const PAD_TOP = 26;
   const PAD_BOTTOM = 26;
   const plotH = $derived(height - PAD_TOP - PAD_BOTTOM);
-  const maxV = $derived(Math.max(100, ...items.map((i) => i.value), (goal ?? 0) * 1.12) * 1.08);
+  const maxV = $derived(Math.max(minScale, ...items.map((i) => i.value), (goal ?? 0) * 1.12) * 1.08);
   const band = $derived(width / Math.max(1, items.length));
   const barW = $derived(Math.max(4, Math.min(24, band * 0.56)));
   const y = (v: number) => PAD_TOP + plotH - (v / maxV) * plotH;
@@ -47,9 +69,11 @@
   // Numero sopra la colonna scelta e scritta "obiettivo": non devono mai sovrapporsi.
   // Se si toccano, la scritta dell'obiettivo passa sull'altro lato del grafico.
   const valueText = $derived(sel && sel.value > 0 ? fmtInt(sel.value) : '');
-  const valueX = $derived(Math.min(width - 24, Math.max(24, band * selected + band / 2)));
+  // Il numero sta centrato sulla sua colonna; vicino ai bordi si sposta quel tanto che basta per non uscire.
+  const valueHalf = $derived((valueText.length * 7.6) / 2 + 2);
+  const valueX = $derived(Math.min(width - valueHalf, Math.max(valueHalf, band * selected + band / 2)));
   const valueY = $derived(sel ? Math.max(14, y(sel.value) - 8) : 0);
-  const goalText = $derived(goal ? `obiettivo ${fmtInt(goal)}` : '');
+  const goalText = $derived(goal ? (goalCaption ?? `obiettivo ${fmtInt(goal)}`) : '');
   const goalY = $derived(goal ? y(goal) - 5 : 0);
   const goalW = $derived(goalText.length * 6.2);
   const goalOnLeft = $derived.by(() => {
@@ -82,7 +106,7 @@
         fill="transparent"
         role="button"
         tabindex="0"
-        aria-label="{it.title}: {fmtInt(it.value)} {unit}"
+        aria-label="{it.title}: {fmtInt(it.value)} {unitFor(it.value)}"
         onclick={() => (selected = i)}
         onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (selected = i)}
       />
@@ -92,16 +116,19 @@
     {/if}
   </svg>
   {#if sel}
-    <p class="caption">{sel.title}: <strong>{sel.value > 0 ? `${fmtInt(sel.value)} ${unit}` : 'niente registrato'}</strong></p>
+    <p class="caption">{sel.title}: <strong>{sel.value > 0 ? `${fmtInt(sel.value)} ${unitFor(sel.value)}` : (sel.empty ?? emptyText)}</strong></p>
   {/if}
-  <table class="sr">
-    <caption>Valori per giorno</caption>
-    <tbody>
-      {#each items as it (it.key)}
-        <tr><th>{it.title}</th><td>{fmtInt(it.value)} {unit}</td></tr>
-      {/each}
-    </tbody>
-  </table>
+  <!-- Tabella per i lettori di schermo. Sta dentro un riquadro: una tabella da sola non si lascia rimpicciolire. -->
+  <div class="sr">
+    <table>
+      <caption>Valori per giorno</caption>
+      <tbody>
+        {#each items as it (it.key)}
+          <tr><th>{it.title}</th><td>{fmtInt(it.value)} {unitFor(it.value)}</td></tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <style>
@@ -171,9 +198,12 @@
   }
   .sr {
     position: absolute;
+    left: 0;
+    bottom: 0;
     width: 1px;
     height: 1px;
     overflow: hidden;
-    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 </style>

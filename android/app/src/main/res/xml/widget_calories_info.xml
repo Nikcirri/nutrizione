@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Grande 2×2 quando lo aggiungi; si può allargare e allungare. Non si aggiorna a tempo: lo aggiorna l'app. -->
+<!--
+  Grande 2×2 quando lo aggiungi; si può allargare, allungare e abbassare fino a una riga (2×1).
+  Ogni 30 minuti Android lo fa ridisegnare: è la riserva per il cambio del giorno, se la sveglia di mezzanotte non parte.
+-->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_calories_desc"
     android:initialLayout="@layout/widget_calories"
     android:minWidth="110dp"
     android:minHeight="110dp"
     android:minResizeWidth="110dp"
-    android:minResizeHeight="110dp"
+    android:minResizeHeight="40dp"
     android:previewLayout="@layout/widget_calories"
     android:resizeMode="horizontal|vertical"
     android:targetCellWidth="2"
     android:targetCellHeight="2"
-    android:updatePeriodMillis="0"
+    android:updatePeriodMillis="1800000"
     android:widgetCategory="home_screen" />

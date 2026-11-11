@@ -285,7 +285,8 @@ export async function deleteFast(db: NutriDB, id: number): Promise<Fast | undefi
 
 // ---------- Backup ----------
 
-export async function exportAll(db: NutriDB): Promise<BackupData> {
+/** Tutto il database. Il contatore di sigarette non è qui: lo aggiunge chi crea il file di backup. */
+export async function exportAll(db: NutriDB): Promise<Omit<BackupData, 'cigarettes'>> {
   const [settings, foods, entries, water, weights, activities, health, fasts, dishes] = await Promise.all([
     loadSettings(db),
     db.foods.toArray(),
@@ -300,8 +301,8 @@ export async function exportAll(db: NutriDB): Promise<BackupData> {
   return { settings, foods, entries, water, weights, activities, health, fasts, dishes };
 }
 
-/** Sostituisce tutti i dati con quelli del backup. */
-export async function importAll(db: NutriDB, data: BackupData): Promise<void> {
+/** Sostituisce tutti i dati del database con quelli del backup. */
+export async function importAll(db: NutriDB, data: Omit<BackupData, 'cigarettes'>): Promise<void> {
   await db.transaction('rw', [db.foods, db.entries, db.water, db.weights, db.activities, db.health, db.fasts, db.kv, db.dishes], async () => {
     await Promise.all([
       db.foods.clear(),
