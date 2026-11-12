@@ -1,5 +1,14 @@
 # Novità
 
+## [0.9.4] - 2026-11-12
+
+- Foto AI più costante: la stessa foto dà la stessa stima.
+- Le correzioni ("Di meno", "Più condito"…) cambiano le stime solo dopo 3 volte.
+- Nel Profilo puoi azzerare le correzioni imparate dalla Foto AI.
+- Con la stessa foto e la stessa descrizione l'app ridà subito la stima di prima, senza chiedere di nuovo a Gemini; c'è il pulsante "Chiedi una nuova stima".
+- Stime meno ballerine anche per foto nuove: Gemini riceve porzioni di riferimento, arrotonda i grammi e usa un "seme" fisso che riduce il caso.
+- Prima bastava toccare due volte "Di meno" (anche sulla stessa foto) perché tutte le stime dopo diventassero più piccole. Ora ogni correzione conta una volta per stima, ne servono 3, e sotto la stima c'è scritto quando l'app ne ha tenuto conto.
+
 ## [0.9.3] - 2026-11-12
 
 - Foto AI più rapida: ai modelli leggeri si chiede il ragionamento minimo.

@@ -4,6 +4,7 @@
   import { reportError } from '../../lib/errors';
   import {
     habitsHints,
+    habitsLabels,
     isDressing,
     itemPer100,
     modelLabel,
@@ -54,6 +55,12 @@
   let usedModel = $state('');
   /** Riga dei tentativi anche quando la stima riesce: chi ha risposto e in quanti secondi. */
   let usedDetail = $state('');
+  /** La stima è quella già fatta per la stessa foto e la stessa descrizione. */
+  let fromCache = $state(false);
+  /** Abitudini (dalle correzioni passate) di cui la stima ha tenuto conto, dette all'utente. */
+  let usedHabits = $state<string[]>([]);
+  /** Abitudini già contate per questa stima: ogni correzione conta al massimo una volta per stima. */
+  let taught = new Set<keyof AiHabits>();
   let rows = $state<Row[]>([]);
   let answers = $state<Record<number, number>>({});
   let details = $state(true);
@@ -135,7 +142,7 @@
     errorDetail = '';
   }
 
-  async function analyze(extra = '') {
+  async function analyze(extra = '', fresh = false) {
     if (!key || busy) return;
     if (!image && description.trim().length < 3 && !extra) return;
     busy = true;
@@ -147,10 +154,13 @@
     try {
       const [habits, top] = await Promise.all([getHabits(db), topDishes(db, 15)]);
       const desc = [description.trim(), extra ? `Aggiunta dell’utente: ${extra}` : ''].filter(Boolean).join('\n');
-      const { meal: r, model, detail } = await analyzeMeal(key, desc, image ? { base64: image.base64, mime: image.mime } : null, {
-        habits: habitsHints(habits),
-        knownDishes: top.map((d) => d.name),
-      });
+      const { meal: r, model, detail, cached } = await analyzeMeal(
+        key,
+        desc,
+        image ? { base64: image.base64, mime: image.mime } : null,
+        { habits: habitsHints(habits), knownDishes: top.map((d) => d.name) },
+        { fresh },
+      );
       if (!r.items.length) {
         // Niente riconosciuto: si resta dove si era (foto e testo restano) e si spiega cosa fare.
         error = extra
@@ -164,6 +174,9 @@
       result = r;
       usedModel = model;
       usedDetail = detail;
+      fromCache = cached === true;
+      usedHabits = habitsLabels(habits);
+      taught = new Set();
       rows = r.items.map((i) => ({ base: i, grams: String(i.grams), include: true }));
       answers = Object.fromEntries(r.questions.map((_, i) => [i, 0]));
       known = r.items.length ? ((await findDish(db, r.dish)) ?? null) : null;
@@ -212,7 +225,10 @@
     }
     void tapFeedback();
     const h = habit[kind];
-    if (h) void addHabit(db, h).catch(() => undefined);
+    if (h && !taught.has(h)) {
+      taught.add(h);
+      void addHabit(db, h).catch(() => undefined);
+    }
   }
 
   function answer(qi: number, oi: number) {
@@ -461,6 +477,15 @@
       {#if result.note}<p class="note">{result.note}</p>{/if}
       {#if usedModel}<p class="note small">Stima di Gemini {modelLabel(usedModel)}</p>{/if}
       {#if usedDetail}<p class="note small">{usedDetail}</p>{/if}
+      {#if usedHabits.length}
+        <p class="note small">Tiene conto delle tue correzioni passate: {usedHabits.join(', ')}. Le azzeri dal Profilo.</p>
+      {/if}
+      {#if fromCache}
+        <div class="cached">
+          <p class="note small">Stessa foto e stessa descrizione di prima: è la stessa stima, senza chiedere di nuovo a Gemini.</p>
+          <button class="btn btn-ghost btn-small" disabled={busy} onclick={() => analyze('', true)}>Chiedi una nuova stima</button>
+        </div>
+      {/if}
     {/if}
 
     <h4 class="section-title">Pasto</h4>
@@ -773,5 +798,14 @@
   .again {
     margin-top: 10px;
     color: var(--text-muted);
+  }
+  .cached {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+  }
+  .cached .note {
+    flex: 1 1 180px;
   }
 </style>

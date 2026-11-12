@@ -5,6 +5,8 @@ import { db } from '../db';
 import {
   buildPrompt,
   describeAttempts,
+  estimateKey,
+  findCached,
   geminiProblem,
   geminiText,
   isTimeoutError,
@@ -16,6 +18,8 @@ import {
   problemMessage,
   raceStep,
   RETRY_MIN_LEFT_MS,
+  sanitizeCache,
+  withCached,
   SLOW_FOR_MS,
   thinkingLevelFor,
   type AiAttempt,
@@ -46,6 +50,13 @@ const LIGHT_KEY = 'aiLightUntil';
 const LIGHT_FOR_MS = 24 * 60 * 60 * 1000;
 /** Modelli lenti con le foto (vedi `SlowModels`). */
 const SLOW_KEY = 'aiSlowWithPhoto';
+/** Ultime stime fatte (vedi `CachedEstimate`). */
+const CACHE_KEY = 'aiEstimates';
+/**
+ * Seme fisso: Gemini sceglie le parole con una parte di caso; con lo stesso seme la stessa richiesta
+ * dà (quasi sempre) la stessa risposta, quindi grammi e calorie oscillano molto meno.
+ */
+const SEED = 20261112;
 
 /** La richiesta non è arrivata a Gemini (rete) o Gemini non ha risposto in tempo. */
 class NetProblem extends Error {
@@ -139,7 +150,7 @@ function body(prompt: string, image: { base64: string; mime: string } | null, mo
   const parts: unknown[] = [];
   if (image) parts.push({ inline_data: { mime_type: image.mime, data: image.base64 } });
   parts.push({ text: prompt });
-  const generationConfig: Record<string, unknown> = { responseMimeType: 'application/json' };
+  const generationConfig: Record<string, unknown> = { responseMimeType: 'application/json', seed: SEED };
   if (mode !== 'bare') generationConfig.thinkingConfig = { thinkingLevel: thinkingLevelFor(model) };
   if (mode === 'full') generationConfig.responseJsonSchema = MEAL_SCHEMA;
   return { contents: [{ role: 'user', parts }], generationConfig };
@@ -189,6 +200,35 @@ export interface AiAnalysis {
   model: string;
   /** Riga tecnica sui tentativi (vuota se il primo modello ha risposto subito). */
   detail: string;
+  /** Stessa foto e stessa descrizione di una stima già fatta: ridata uguale, senza chiedere a Gemini. */
+  cached?: boolean;
+}
+
+export interface AnalyzeOptions {
+  /** Chiedere comunque una stima nuova anche se la stessa foto è già stata stimata. */
+  fresh?: boolean;
+}
+
+/** Stima del piatto: la stessa foto con la stessa descrizione dà sempre la stessa stima (vedi `estimateMeal`). */
+export async function analyzeMeal(
+  key: string,
+  description: string,
+  image: { base64: string; mime: string } | null,
+  context: PromptContext = {},
+  options: AnalyzeOptions = {},
+): Promise<AiAnalysis> {
+  const now = Date.now();
+  const cacheKey = estimateKey(image?.base64 ?? null, description, context.habits ?? []);
+  const row = await db.kv.get(CACHE_KEY).catch(() => undefined);
+  const cache = sanitizeCache(row?.value, now);
+  const hit = options.fresh ? null : findCached(cache, cacheKey);
+  if (hit) return { meal: hit.meal, model: hit.model, detail: '', cached: true };
+  const result = await estimateMeal(key, description, image, context);
+  if (result.meal.items.length) {
+    const next = withCached(cache, { key: cacheKey, at: now, model: result.model, meal: result.meal });
+    void db.kv.put({ key: CACHE_KEY, value: next }).catch(() => undefined);
+  }
+  return result;
 }
 
 /**
@@ -196,11 +236,11 @@ export interface AiAnalysis {
  * Se un modello non riconosce niente (items vuoti) si prova il successivo; se nessuno riconosce niente
  * si restituisce il risultato vuoto (l'app chiede di descrivere il piatto). Lancia AiError se nessuno risponde.
  */
-export async function analyzeMeal(
+async function estimateMeal(
   key: string,
   description: string,
   image: { base64: string; mime: string } | null,
-  context: PromptContext = {},
+  context: PromptContext,
 ): Promise<AiAnalysis> {
   const prompt = buildPrompt(description, image !== null, context);
   const pauses: ModelPauses = await getModelPauses(db).catch(() => ({}));

@@ -23,7 +23,7 @@
   import { readBackupFile, restoreBackup, shareBackup } from '../lib/services/backupFile';
   import { healthAuthorized, openHealthSettings } from '../lib/services/health';
   import { db } from '../lib/db';
-  import { getAiKey, healthDayFor, setAiKey } from '../lib/repo';
+  import { clearHabits, getAiKey, healthDayFor, setAiKey } from '../lib/repo';
   import { appName } from '../lib/logic/healthSources';
   import { useLive } from '../lib/state/live.svelte';
   import AiKeyForm from '../lib/ui/AiKeyForm.svelte';
@@ -102,6 +102,21 @@
     await setAiKey(db, '');
     aiKey = '';
     showToast('Chiave tolta');
+  }
+
+  async function forgetAiHabits() {
+    const ok = await confirmDialog({
+      title: 'Azzerare le correzioni della Foto AI?',
+      message: 'L’app dimentica quello che ha imparato dai pulsanti “Di più”, “Di meno”, “Più condito” e “Meno condito”: le stime torneranno su porzioni normali.',
+      confirmLabel: 'Azzera',
+    });
+    if (!ok) return;
+    try {
+      await clearHabits(db);
+      showToast('Correzioni azzerate');
+    } catch (e) {
+      reportError(e);
+    }
   }
 
   async function exportBackup() {
@@ -397,6 +412,10 @@
       <button class="btn btn-ghost btn-small" onclick={() => (changingKey = true)}>Cambia</button>
       <button class="btn btn-ghost btn-small del" onclick={removeAiKey}>Togli</button>
     </div>
+    <button class="switch-row link" onclick={forgetAiHabits}>
+      <span class="grow">Azzera le correzioni della Foto AI<span class="sub">Quello che l’app ha imparato dai pulsanti “Di più”, “Di meno”, “Condito”</span></span>
+      <Icon name="chevronRight" size={20} />
+    </button>
   </div>
   <p class="note">Serve per “Foto AI” quando aggiungi un pasto: fotografi il piatto e l’app stima ingredienti e valori.</p>
 {:else if aiKey !== null}

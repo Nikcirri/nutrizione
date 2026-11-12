@@ -21,6 +21,12 @@ import {
   GRACE_MS,
   OVERALL_MS,
   raceStep,
+  estimateKey,
+  findCached,
+  fingerprint,
+  habitsLabels,
+  sanitizeCache,
+  withCached,
   thinkingLevelFor,
   STAGGER_MS,
   parseAiMeal,
@@ -185,11 +191,13 @@ describe('AI: porzione, perché e domande', () => {
   });
   it('abitudini dalle correzioni e nel prompt', () => {
     expect(habitsHints(NO_HABITS)).toEqual([]);
-    const hints = habitsHints({ lessDressing: 3, moreDressing: 0, smaller: 0, bigger: 2 });
+    const hints = habitsHints({ lessDressing: 3, moreDressing: 0, smaller: 0, bigger: 3 });
     expect(hints).toHaveLength(2);
     const prompt = buildPrompt('', true, { habits: hints, knownDishes: ['Colazione solita'] });
     expect(prompt).toContain('condisce poco');
     expect(prompt).toContain('Colazione solita');
+    // Riferimenti fissi per grammi più stabili.
+    expect(prompt).toContain('peso da crudi');
   });
 });
 
@@ -250,5 +258,41 @@ describe('AI: quanto ragionamento chiedere', () => {
     expect(describeAttempts([{ model: 'gemini-3.8-flash', outcome: 'slower' }, { model: 'gemini-3.5-flash-lite', outcome: 'ok', seconds: 12 }])).toBe(
       '3.8 Flash: più lento di un altro · 3.5 Flash-Lite: ok (12 s)',
     );
+  });
+});
+
+describe('AI: stessa foto, stessa stima', () => {
+  const meal = { dish: 'Penne al tonno', portion: 'normale', confidence: 'alta', why: '', note: '', questions: [], items: [{ name: 'Pasta', grams: 90, kcal: 320, carbs: 65, protein: 11, fat: 1.5, fiber: 3 }] };
+  it('impronta uguale per contenuti uguali, diversa per contenuti diversi', () => {
+    const photo = 'A'.repeat(50_000);
+    expect(fingerprint(photo)).toBe(fingerprint('A'.repeat(50_000)));
+    expect(fingerprint(photo)).not.toBe(fingerprint('A'.repeat(49_999) + 'B'));
+    expect(estimateKey(photo, ' penne ', [])).toBe(estimateKey(photo, 'penne', []));
+    expect(estimateKey(photo, 'penne', [])).not.toBe(estimateKey(photo, 'penne al tonno', []));
+    expect(estimateKey(photo, 'penne', [])).not.toBe(estimateKey(photo, 'penne', ['Di solito condisce poco.']));
+    expect(estimateKey(null, 'penne', [])).not.toBe(estimateKey(photo, 'penne', []));
+  });
+
+  it('si ritrova la stima, si tengono le ultime e si scartano quelle vecchie o rovinate', () => {
+    const now = Date.UTC(2026, 10, 12);
+    const list = withCached([], { key: 'k1', at: now, model: 'gemini-3.6-flash', meal: meal as never });
+    const back = sanitizeCache(JSON.parse(JSON.stringify(list)), now);
+    expect(findCached(back, 'k1')?.meal.items[0]?.kcal).toBe(320);
+    expect(findCached(back, 'k2')).toBeNull();
+    expect(sanitizeCache(list, now + 31 * 24 * 3600 * 1000)).toEqual([]);
+    expect(sanitizeCache([{ key: 'x', at: now, model: 'm', meal: { items: [] } }, 5, null], now)).toEqual([]);
+    expect(sanitizeCache('rotto', now)).toEqual([]);
+    let many = back;
+    for (let i = 0; i < 40; i++) many = withCached(many, { ...back[0]!, key: `n${i}` });
+    expect(many).toHaveLength(30);
+    expect(many[0]?.key).toBe('n39');
+  });
+});
+
+describe('AI: abitudini dalle correzioni', () => {
+  it('servono 3 correzioni nette', () => {
+    expect(habitsHints({ lessDressing: 0, moreDressing: 0, smaller: 2, bigger: 0 })).toEqual([]);
+    expect(habitsHints({ lessDressing: 0, moreDressing: 0, smaller: 3, bigger: 0 })).toEqual(['Di solito mangia porzioni più piccole della media.']);
+    expect(habitsLabels({ lessDressing: 4, moreDressing: 1, smaller: 3, bigger: 1 })).toEqual(['condisci poco']);
   });
 });

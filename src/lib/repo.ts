@@ -57,6 +57,11 @@ export async function getHabits(db: NutriDB): Promise<AiHabits> {
   return v ? { lessDressing: n(v.lessDressing), moreDressing: n(v.moreDressing), smaller: n(v.smaller), bigger: n(v.bigger) } : { ...NO_HABITS };
 }
 
+/** Dimentica le correzioni della Foto AI (e le abitudini imparate da lì). */
+export async function clearHabits(db: NutriDB): Promise<void> {
+  await db.kv.delete('aiHabits');
+}
+
 export async function addHabit(db: NutriDB, key: keyof AiHabits): Promise<void> {
   const h = await getHabits(db);
   h[key] = Math.min(50, h[key] + 1);

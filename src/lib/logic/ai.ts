@@ -60,6 +60,9 @@ export function buildPrompt(description: string, hasPhoto: boolean, context: Pro
     'Dividi il piatto nei suoi ingredienti principali (massimo 10), compresi olio, burro, condimenti e salse che si vedono o che la ricetta usa normalmente.',
     'Per ogni ingrediente dai i grammi presenti nel piatto e i valori per QUELLA quantità (non per 100 g): kcal, carboidrati, proteine, grassi e fibre in grammi.',
     'Scrivi i nomi in italiano.',
+    // Riferimenti fissi: la stessa foto deve dare sempre più o meno gli stessi grammi.
+    'Riferimenti per le quantità: un piatto piano è largo circa 26 cm, una forchetta è lunga circa 20 cm. Porzioni italiane normali: pasta o riso 80–100 g (peso da crudi), pane 50 g, carne 120 g, pesce 150 g, tonno in scatola sgocciolato 50–80 g, olio 10 g (un cucchiaio), formaggio grattugiato 10 g. Pasta e riso indicali sempre a peso crudo.',
+    'Arrotonda i grammi: a 10 g gli ingredienti principali, a 5 g olio, burro e condimenti.',
     hasPhoto && desc
       ? 'La descrizione dell’utente ha la precedenza: anche se la foto è scura, sfocata o non si capisce, stima sempre il cibo descritto.'
       : hasPhoto
@@ -233,11 +236,81 @@ export const NO_HABITS: AiHabits = { lessDressing: 0, moreDressing: 0, smaller: 
 /** Abitudini imparate dalle correzioni, in frasi da dare all'AI. */
 export function habitsHints(h: AiHabits): string[] {
   const out: string[] = [];
-  if (h.lessDressing - h.moreDressing >= 2) out.push('Di solito condisce poco: stima olio e condimenti scarsi.');
-  if (h.moreDressing - h.lessDressing >= 2) out.push('Di solito condisce molto: stima olio e condimenti generosi.');
-  if (h.smaller - h.bigger >= 2) out.push('Di solito mangia porzioni più piccole della media.');
-  if (h.bigger - h.smaller >= 2) out.push('Di solito mangia porzioni più grandi della media.');
+  if (h.lessDressing - h.moreDressing >= HABIT_MIN) out.push('Di solito condisce poco: stima olio e condimenti scarsi.');
+  if (h.moreDressing - h.lessDressing >= HABIT_MIN) out.push('Di solito condisce molto: stima olio e condimenti generosi.');
+  if (h.smaller - h.bigger >= HABIT_MIN) out.push('Di solito mangia porzioni più piccole della media.');
+  if (h.bigger - h.smaller >= HABIT_MIN) out.push('Di solito mangia porzioni più grandi della media.');
   return out;
+}
+
+/**
+ * Quante correzioni (al massimo una per stima) servono perché diventino un'abitudine. Con 2 bastava
+ * toccare due volte "Di meno" sulla stessa foto per cambiare tutte le stime dopo.
+ */
+export const HABIT_MIN = 3;
+
+/** Le stesse abitudini dette all'utente, sotto la stima. */
+export function habitsLabels(h: AiHabits): string[] {
+  const out: string[] = [];
+  if (h.lessDressing - h.moreDressing >= HABIT_MIN) out.push('condisci poco');
+  if (h.moreDressing - h.lessDressing >= HABIT_MIN) out.push('condisci molto');
+  if (h.smaller - h.bigger >= HABIT_MIN) out.push('porzioni più piccole');
+  if (h.bigger - h.smaller >= HABIT_MIN) out.push('porzioni più grandi');
+  return out;
+}
+
+// ---------- Stessa foto, stessa stima ----------
+
+/** Una stima già fatta, per ridarla uguale se arriva la stessa foto con la stessa descrizione. */
+export interface CachedEstimate {
+  key: string;
+  at: number;
+  model: string;
+  meal: AiMeal;
+}
+
+const CACHE_MAX = 30;
+const CACHE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Impronta breve di un testo lungo (cyrb53): uguale per contenuti uguali, diversa per contenuti diversi. */
+export function fingerprint(text: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36) + text.length.toString(36);
+}
+
+/** Chiave della stima: foto, descrizione e abitudini (se cambia una di queste la stima si rifà). */
+export function estimateKey(imageBase64: string | null, description: string, habits: readonly string[]): string {
+  return fingerprint(`${imageBase64 ?? ''}\u0000${description.trim()}\u0000${habits.join('|')}`);
+}
+
+/** Legge l'elenco salvato scartando le stime rovinate o troppo vecchie. */
+export function sanitizeCache(v: unknown, now: number): CachedEstimate[] {
+  if (!Array.isArray(v)) return [];
+  const out: CachedEstimate[] = [];
+  for (const x of v) {
+    const e = x as Partial<CachedEstimate> | null;
+    if (!e || typeof e.key !== 'string' || typeof e.at !== 'number' || typeof e.model !== 'string' || now - e.at > CACHE_MS) continue;
+    const meal = parseAiMeal(JSON.stringify(e.meal ?? null));
+    if (meal && meal.items.length) out.push({ key: e.key, at: e.at, model: e.model, meal });
+  }
+  return out.slice(0, CACHE_MAX);
+}
+
+export function findCached(list: readonly CachedEstimate[], key: string): CachedEstimate | null {
+  return list.find((e) => e.key === key) ?? null;
+}
+
+/** Aggiunge (o sostituisce) una stima in cima all'elenco, tenendo le ultime 30. */
+export function withCached(list: readonly CachedEstimate[], entry: CachedEstimate): CachedEstimate[] {
+  return [entry, ...list.filter((e) => e.key !== entry.key)].slice(0, CACHE_MAX);
 }
 
 /** Lo stesso ingrediente con un'altra quantità (i valori cambiano in proporzione). */
