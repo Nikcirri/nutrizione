@@ -1,5 +1,10 @@
 # Novità
 
+## [0.9.6] - 2026-11-12
+- Foto AI: quando Google pubblica un modello Gemini nuovo, l'app lo usa da sola (senza aggiornamenti).
+- Nel Profilo vedi quali modelli usa e se arrivano dall'elenco di Google.
+- Se Google non dà l'elenco, l'app usa i suoi modelli e i nomi "sempre aggiornati" di Google.
+
 ## [0.9.5] - 2026-11-12
 
 - Foto AI: meno richieste, così il limite gratuito di Gemini dura di più.

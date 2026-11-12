@@ -21,6 +21,8 @@ import {
   GRACE_MS,
   OVERALL_MS,
   raceStep,
+  pickModels,
+  LATEST_ALIASES,
   wasSlow,
   estimateKey,
   findCached,
@@ -306,5 +308,41 @@ describe('AI: modelli lenti con le foto', () => {
     expect(wasSlow(null, 6_000)).toBe(false);
     expect(wasSlow('ok', 30_000)).toBe(false);
     expect(wasSlow('quota', 1_000)).toBe(false);
+  });
+});
+
+describe('AI: modelli nuovi senza aggiornare l’app', () => {
+  const FALLBACK = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+  const gen = (name: string) => ({ name: `models/${name}`, supportedGenerationMethods: ['generateContent', 'countTokens'] });
+  it('prende i due Flash più nuovi e il Flash-Lite più nuovo', () => {
+    const listed = [
+      gen('gemini-3.5-flash'),
+      gen('gemini-3.8-flash'),
+      gen('gemini-3.6-flash'),
+      gen('gemini-3.5-flash-lite'),
+      gen('gemini-3.7-flash-lite'),
+      gen('gemini-3.8-flash-image'),
+      gen('gemini-3.8-pro'),
+      gen('gemini-flash-latest'),
+      { name: 'models/gemini-4-flash-live', supportedGenerationMethods: ['bidiGenerateContent'] },
+      { name: 'models/text-embedding-005', supportedGenerationMethods: ['embedContent'] },
+    ];
+    expect(pickModels(listed, FALLBACK)).toEqual(['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.7-flash-lite']);
+  });
+
+  it('quando esce un modello nuovo lo usa da sola; a pari versione solo quello stabile', () => {
+    const listed = [gen('gemini-3.8-flash'), gen('gemini-4-flash-preview'), gen('gemini-4-flash'), gen('gemini-3.5-flash-lite')];
+    expect(pickModels(listed, FALLBACK)).toEqual(['gemini-4-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite']);
+  });
+
+  it('se di una versione esiste solo la preview, usa la preview', () => {
+    const listed = [gen('gemini-3.8-flash'), gen('gemini-4-flash-preview'), gen('gemini-4-flash-lite-preview')];
+    expect(pickModels(listed, FALLBACK)).toEqual(['gemini-4-flash-preview', 'gemini-3.8-flash', 'gemini-4-flash-lite-preview']);
+  });
+
+  it('senza elenco (o con nomi che non riconosce) usa quelli scritti nell’app', () => {
+    expect(pickModels(null, FALLBACK)).toEqual(FALLBACK);
+    expect(pickModels([gen('gemini-nuovo-nome')], FALLBACK)).toEqual(FALLBACK);
+    expect(LATEST_ALIASES).toContain('gemini-flash-latest');
   });
 });

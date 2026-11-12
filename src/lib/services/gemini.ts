@@ -10,9 +10,11 @@ import {
   geminiProblem,
   geminiText,
   isTimeoutError,
+  LATEST_ALIASES,
   MEAL_SCHEMA,
   modelsToTry,
   parseAiMeal,
+  pickModels,
   OVERALL_MS,
   pauseUntil,
   problemMessage,
@@ -27,6 +29,7 @@ import {
   type AiMeal,
   type AttemptOutcome,
   type GeminiProblem,
+  type ListedModel,
   type ModelPauses,
   type PromptContext,
   type RaceKind,
@@ -40,8 +43,52 @@ const BASE = 'https://generativelanguage.googleapis.com/v1beta';
 /**
  * Dal migliore al più leggero. Si usa sempre il migliore disponibile: uno che ha finito il limite
  * gratuito resta in pausa fino a quando Google lo azzera, poi torna a essere il primo.
+ * Sono solo la riserva: di solito i modelli arrivano dall'elenco di Google (vedi `modelsFor`), così quando
+ * esce un Flash nuovo l'app lo usa da sola, senza aggiornamenti.
  */
 const MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+/** Modelli scelti dall'elenco di Google, riletto una volta al giorno. */
+const MODELS_KEY = 'aiModels';
+const MODELS_REFRESH_MS = 24 * 60 * 60 * 1000;
+
+export interface ModelInfo {
+  /** Dal migliore al più leggero. */
+  models: string[];
+  /** Vero se arrivano dall'elenco di Google; falso se è l'elenco scritto nell'app. */
+  fromList: boolean;
+  at: number;
+}
+
+async function savedModelInfo(): Promise<ModelInfo | null> {
+  const v = (await db.kv.get(MODELS_KEY).catch(() => undefined))?.value as Partial<ModelInfo> | undefined;
+  if (!v || !Array.isArray(v.models) || !v.models.every((m) => typeof m === 'string') || !v.models.length || typeof v.at !== 'number') return null;
+  return { models: v.models, fromList: v.fromList === true, at: v.at };
+}
+
+/**
+ * I modelli da usare. Una volta al giorno (o subito se un modello è sparito) si chiede a Google l'elenco
+ * dei modelli: funziona anche con la chiave gratuita e non consuma il limite delle stime.
+ * Se l'elenco non arriva si tiene quello dell'ultima volta, altrimenti quelli scritti nell'app più i nomi
+ * "sempre aggiornati" di Google.
+ */
+export async function modelsFor(key: string, force = false): Promise<ModelInfo> {
+  const saved = await savedModelInfo();
+  if (saved && !force && Date.now() - saved.at < MODELS_REFRESH_MS) return saved;
+  let listed: ListedModel[] | null = null;
+  try {
+    const res = await request('GET', `${BASE}/models?pageSize=1000`, key, undefined, 15_000);
+    const models = (res.data as { models?: unknown } | null)?.models;
+    if (res.status >= 200 && res.status < 300 && Array.isArray(models)) listed = models as ListedModel[];
+  } catch {
+    listed = null;
+  }
+  if (!listed && saved) return saved;
+  // Elenco arrivato e con almeno un Flash riconosciuto: si usa quello; altrimenti la riserva.
+  const fromList = listed !== null && pickModels(listed, []).length > 0;
+  const info: ModelInfo = { models: fromList ? pickModels(listed, MODELS) : [...MODELS, ...LATEST_ALIASES], fromList, at: Date.now() };
+  await db.kv.put({ key: MODELS_KEY, value: info }).catch(() => undefined);
+  return info;
+}
 /** Tempo massimo per la richiesta "completa" (vedi `body`): se Gemini si blocca non si aspetta oltre. */
 const FULL_TIMEOUT_MS = 30_000;
 /** Tempo massimo per le altre richieste. */
@@ -245,7 +292,7 @@ async function estimateMeal(
 ): Promise<AiAnalysis> {
   const prompt = buildPrompt(description, image !== null, context);
   const pauses: ModelPauses = await getModelPauses(db).catch(() => ({}));
-  const models = modelsToTry(MODELS, pauses, Date.now());
+  const models = modelsToTry((await modelsFor(key)).models, pauses, Date.now());
   const slow = image ? await getSlowModels() : {};
   const mode: Mode = (await lightPreferred()) ? 'light' : 'full';
   const savePauses = () => void setModelPauses(db, pauses).catch(() => undefined);
@@ -356,6 +403,8 @@ async function estimateMeal(
 
   // Le richieste ancora in corso non servono più.
   for (const r of runs) if (!r.result) r.ctrl.abort();
+  // Un modello è sparito (Google l'ha spento): la prossima volta si rilegge subito l'elenco.
+  if (runs.some((r) => r.result?.outcome === 'model')) void db.kv.delete(MODELS_KEY).catch(() => undefined);
 
   // Con una foto: chi non ha risposto (o è stato superato) parte senza vantaggio per un giorno; chi ha risposto bene lo riprende.
   if (image) {

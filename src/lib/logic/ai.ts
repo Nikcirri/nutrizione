@@ -347,6 +347,47 @@ export type ModelPauses = Record<string, number>;
  * Modelli da provare adesso, sempre dal migliore: si saltano quelli in pausa.
  * Se sono tutti in pausa si provano comunque, nello stesso ordine.
  */
+// ---------- Modelli nuovi senza aggiornare l'app ----------
+
+/** Un modello dell'elenco di Google (`models.list`). */
+export interface ListedModel {
+  name: string;
+  supportedGenerationMethods?: string[];
+}
+
+/**
+ * Nomi che Google tiene sempre puntati al Flash e al Flash-Lite più recenti: riserva se l'elenco non
+ * arriva o se i modelli scritti nell'app spariscono.
+ */
+export const LATEST_ALIASES = ['gemini-flash-latest', 'gemini-flash-lite-latest'];
+
+const FLASH_ID = /^gemini-(\d+(?:\.\d+)?)-flash(-lite)?(-preview)?$/;
+
+/**
+ * I modelli da usare, dal migliore: i due Flash più nuovi e il Flash-Lite più nuovo dell'elenco di Google
+ * (il livello gratuito vale solo per Flash e Flash-Lite). A pari versione prima quello stabile, poi la
+ * "preview". Varianti speciali (immagini, audio, live…) escluse dal nome. Senza elenco valido: `fallback`.
+ */
+export function pickModels(listed: readonly ListedModel[] | null, fallback: readonly string[]): string[] {
+  if (!listed) return [...fallback];
+  const found = listed
+    .filter((m) => (m.supportedGenerationMethods ?? ['generateContent']).includes('generateContent'))
+    .map((m) => {
+      const id = m.name.replace(/^models\//, '');
+      const match = FLASH_ID.exec(id);
+      return match ? { id, version: Number(match[1]), lite: Boolean(match[2]), preview: Boolean(match[3]) } : null;
+    })
+    .filter((m): m is NonNullable<typeof m> => m !== null && Number.isFinite(m.version))
+    .sort((a, b) => b.version - a.version || Number(a.preview) - Number(b.preview));
+  // Un solo modello per versione (la "preview" di una versione già stabile è un doppione).
+  const onePerVersion = (list: typeof found) =>
+    list.filter((m, i) => list.findIndex((o) => o.version === m.version) === i);
+  const flash = onePerVersion(found.filter((m) => !m.lite)).slice(0, 2);
+  const lite = onePerVersion(found.filter((m) => m.lite)).slice(0, 1);
+  const out = [...flash, ...lite].map((m) => m.id);
+  return out.length ? out : [...fallback];
+}
+
 export function modelsToTry(models: readonly string[], pauses: ModelPauses, now: number): string[] {
   const ready = models.filter((m) => !((pauses[m] ?? 0) > now));
   return ready.length ? ready : [...models];
@@ -405,6 +446,8 @@ export function thinkingLevelFor(model: string): 'minimal' | 'low' {
 
 /** "gemini-3.5-flash-lite" → "3.5 Flash-Lite". */
 export function modelLabel(model: string): string {
+  if (model === 'gemini-flash-latest') return 'Flash (il più recente)';
+  if (model === 'gemini-flash-lite-latest') return 'Flash-Lite (il più recente)';
   return model
     .replace(/^gemini-/, '')
     .split('-')

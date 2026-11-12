@@ -27,6 +27,8 @@
   import { appName } from '../lib/logic/healthSources';
   import { useLive } from '../lib/state/live.svelte';
   import AiKeyForm from '../lib/ui/AiKeyForm.svelte';
+  import { modelsFor, type ModelInfo } from '../lib/services/gemini';
+  import { modelLabel } from '../lib/logic/ai';
   import { checkUpdateNow, installUpdate } from '../lib/state/update.svelte';
   import { app, currentTargets, initApp, sheets, updateSettings, weightForCalc } from '../lib/state/app.svelte';
   import { loadCigarettes } from '../lib/state/cigarettes.svelte';
@@ -54,10 +56,19 @@
   let checking = $state(false);
   let aiKey = $state<string | null>(null);
   let changingKey = $state(false);
+  /** Modelli di Gemini in uso e se arrivano dall'elenco di Google (così i nuovi arrivano da soli). */
+  let modelInfo = $state<ModelInfo | null>(null);
 
   onMount(() => {
     getAiKey(db)
-      .then((k) => (aiKey = k))
+      .then((k) => {
+        aiKey = k;
+        if (k) {
+          modelsFor(k)
+            .then((i) => (modelInfo = i))
+            .catch(() => (modelInfo = null));
+        }
+      })
       .catch(() => (aiKey = ''));
     if (isNative() && prefs.healthConnected) {
       healthAuthorized()
@@ -418,6 +429,14 @@
     </button>
   </div>
   <p class="note">Serve per “Foto AI” quando aggiungi un pasto: fotografi il piatto e l’app stima ingredienti e valori.</p>
+  {#if modelInfo}
+    <p class="note">
+      Modelli in uso: {modelInfo.models.map(modelLabel).join(', ')}.
+      {modelInfo.fromList
+        ? 'Presi dall’elenco di Google, controllato ogni giorno: quando esce un modello nuovo l’app lo usa da sola.'
+        : 'Google non ha dato il suo elenco: l’app usa quelli scritti al suo interno e i nomi “sempre aggiornati” di Google.'}
+    </p>
+  {/if}
 {:else if aiKey !== null}
   <div class="card">
     <AiKeyForm
