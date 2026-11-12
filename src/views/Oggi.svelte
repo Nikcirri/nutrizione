@@ -8,6 +8,7 @@
   import { mealForHour } from '../lib/logic/dates';
   import { EXPLAIN, dayHints, dayVerdict, mealVerdict, nextMeal, nextMealAdvice, type Topic } from '../lib/logic/advice';
   import { activitySplit, healthBurned, MAX_WORKOUT_KCAL, workoutKcalExplanation } from '../lib/logic/workoutKcal';
+  import { appName } from '../lib/logic/healthSources';
   import { isNative, tapFeedback } from '../lib/platform';
   import {
     activitiesFor,
@@ -434,6 +435,7 @@
             {fmtInt(health.current?.steps ?? 0)} passi{health.current ? ` · aggiornato alle ${timeLabel(health.current.syncedAt)}` : ''}
           </span>
           <span class="sub wrap">
+            {#if health.current?.sourceId}Da {appName(health.current.sourceId)}.{:else if health.current?.sources?.length}Da tutte le app insieme.{/if}
             {#if split.complete}
               Passi e movimento fuori dagli allenamenti
             {:else if workouts.length}

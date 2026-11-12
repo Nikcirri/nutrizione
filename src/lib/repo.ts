@@ -6,6 +6,7 @@ import { sanitizeSettings } from './logic/settings';
 import type { Activity, DiaryEntry, Dish, Fast, Food, HealthDay, MealId, Settings, WeightEntry } from './types';
 import { NO_HABITS, type AiHabits, type ModelPauses } from './logic/ai';
 import { normalize } from './logic/search';
+import { applySource } from './logic/healthSources';
 import { applyOverrides, sanitizeOverrides, withOverride, type WorkoutKcalOverrides } from './logic/workoutKcal';
 
 // ---------- Impostazioni ----------
@@ -263,10 +264,14 @@ export async function setWorkoutOverride(db: NutriDB, id: string, date: string, 
   await db.kv.put({ key: 'workoutKcal', value: next });
 }
 
-/** I dati di Health Connect di un giorno, con le calorie degli allenamenti scritte a mano. */
+/**
+ * I dati di Health Connect di un giorno come li mostra l'app: passi e calorie dell'app scelta nel Profilo
+ * (in automatico l'orologio) e le calorie degli allenamenti scritte a mano.
+ */
 export async function healthDayFor(db: NutriDB, date: string): Promise<HealthDay | undefined> {
-  const [day, overrides] = await Promise.all([db.health.get(date), getWorkoutOverrides(db)]);
-  return day ? { ...day, workouts: applyOverrides(day.workouts, overrides) } : undefined;
+  const [day, overrides, settings] = await Promise.all([db.health.get(date), getWorkoutOverrides(db), loadSettings(db)]);
+  if (!day) return undefined;
+  return applySource({ ...day, workouts: applyOverrides(day.workouts, overrides) }, settings.prefs.healthSource);
 }
 
 export async function saveHealth(db: NutriDB, day: HealthDay): Promise<void> {

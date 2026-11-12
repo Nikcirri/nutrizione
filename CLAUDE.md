@@ -35,9 +35,14 @@
 - La chiave di firma non va mai nel repository: vive nei Secrets di GitHub (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`); il workflow legge da solo il nome (alias) della chiave. Non cambiarla mai.
 - Non cambiare `appId` (`com.nikcirri.nutrizione`) né il nome del database IndexedDB (`nutrizione`). Se cambi lo schema, aggiungi una nuova `version()` in `src/lib/db.ts` senza togliere le vecchie.
 - Dati di Health Connect sempre freschi (`src/lib/healthSync.ts`): rilettura ogni minuto ad app aperta sul Diario, al ritorno nell'app e con "trascina in giù" (Diario e Progressi, in `App.svelte`).
+- Da quale app prendere passi e calorie (`src/lib/logic/healthSources.ts`, con test): il totale di Health Connect (`queryAggregated`) MESCOLA le app (orologio, telefono, Samsung Health…) e dove si sovrappongono ne tiene una sola secondo la priorità.
+  Sul telefono dell'utente l'11/11 dava 589 kcal e 5157 passi contro 826 e 5983 di Mi Fitness: durante l'allenamento contava il telefono appoggiato.
+  Per questo `readHealthDay` legge anche i singoli dati (`readSamples`) e salva i totali app per app (`HealthDay.sources`) e quelli mescolati (`merged`); `applySource` (chiamata da `healthDayFor`) usa l'app scelta in `prefs.healthSource`: 'auto' = l'app degli allenamenti o l'orologio con più passi, 'all' = tutte insieme.
+  Nel Profilo ("Passi e calorie da") si vedono i numeri di oggi app per app: è il primo posto da guardare se i numeri non tornano.
 - Calorie degli allenamenti (`src/lib/logic/workoutKcal.ts`, con test): NON usare `totalEnergyBurned` del plugin, che è la fetta proporzionale della somma di Health Connect.
   Mi Fitness (orologio Xiaomi dell'utente) manda le calorie attive in blocchi lunghi ore, allenamento compreso: la fetta dava 16 kcal a un allenamento da 238.
   Si leggono i singoli dati (`readSamples`) e si usano solo quelli "a misura" dell'allenamento: prima le calorie attive, poi le totali meno il metabolismo a riposo (`stima`), altrimenti "–".
+  Mi Fitness scrive blocchi di mezz'ora: dei blocchi a cavallo dell'allenamento si toglie solo il movimento "normale" dei minuti fuori (misurato sui blocchi delle due ore vicine), non una parte in proporzione al tempo (che dava 153 invece di 238).
   Toccando l'allenamento nel Diario si legge da dove viene il numero e si può scrivere quello dell'app dell'orologio: `kv` `workoutKcal` (per id dell'allenamento, nel backup), applicato da `healthDayFor` in `repo.ts`. Leggi sempre i dati del giorno con `healthDayFor`, non con `healthFor`.
   Il totale dell'orologio comprende già gli allenamenti: le calorie bruciate sono `healthBurned` = massimo tra il totale e la somma degli allenamenti, MAI la somma dei due (Diario e widget).
   Nella scheda Attività: un rigo per allenamento e "Resto della giornata" (totale − allenamenti) quando tutti hanno un numero, altrimenti "Dall'orologio" con il totale.

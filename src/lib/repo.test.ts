@@ -108,6 +108,30 @@ describe('database', () => {
   });
 });
 
+describe('da quale app prendere passi e calorie', () => {
+  it('in automatico l’orologio, oppure tutte le app insieme', async () => {
+    await saveHealth(db, {
+      date: '2026-11-11',
+      activeKcal: 589,
+      steps: 5157,
+      workouts: [],
+      syncedAt: '2026-11-12T07:03:00Z',
+      merged: { steps: 5157, activeKcal: 589 },
+      sources: [
+        { id: 'com.mi.health', name: 'Mi Fitness', device: null, wearable: true, steps: 5983, activeKcal: 826 },
+        { id: 'android', name: 'Telefono', device: null, wearable: false, steps: 5157, activeKcal: 560 },
+      ],
+    });
+    expect(await healthDayFor(db, '2026-11-11')).toMatchObject({ steps: 5983, activeKcal: 826, sourceId: 'com.mi.health' });
+    const s = await loadSettings(db);
+    s.prefs.healthSource = 'all';
+    await saveSettings(db, s);
+    expect(await healthDayFor(db, '2026-11-11')).toMatchObject({ steps: 5157, activeKcal: 589, sourceId: null });
+    // I dati salvati restano quelli letti: la scelta si applica solo quando si leggono.
+    expect((await healthFor(db, '2026-11-11'))?.activeKcal).toBe(589);
+  });
+});
+
 describe('calorie degli allenamenti scritte a mano', () => {
   it('si vedono nei dati del giorno e si possono togliere', async () => {
     const gym = { id: 'hc-1', type: 'other', label: 'Allenamento', start: '2026-11-11T18:12:00Z', minutes: 36, kcal: null, kcalFrom: 'day' as const };

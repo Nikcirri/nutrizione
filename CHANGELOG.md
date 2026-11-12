@@ -1,5 +1,14 @@
 # Novità
 
+## [0.9.1] - 2026-11-12
+
+- Passi e calorie ora arrivano solo dall'orologio, come in Mi Fitness.
+- Nel Profilo vedi i numeri di ogni app (orologio, telefono…) e scegli quale usare.
+- Calorie dell'allenamento molto più vicine a quelle dell'orologio.
+- Perché i numeri non tornavano: Health Connect mette insieme i dati dell'orologio e quelli del telefono e, dove si sovrappongono, ne tiene uno solo. Durante l'allenamento, con il telefono appoggiato, mancavano circa 240 kcal e 800 passi.
+- Ora l'app legge i dati app per app e in automatico usa l'orologio (l'app che registra gli allenamenti). Nel Profilo, "Passi e calorie da", puoi scegliere un'altra app o tutte insieme.
+- Mi Fitness scrive le calorie a blocchi di mezz'ora: per l'allenamento l'app non divide più i blocchi in proporzione al tempo, ma toglie solo il movimento normale dei minuti fuori dall'allenamento.
+
 ## [0.9.0] - 2026-11-12
 
 - Foto AI con la foto: se Gemini non risponde passa al modello successivo.

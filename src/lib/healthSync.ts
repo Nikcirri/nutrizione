@@ -25,6 +25,11 @@ export function syncHealthDay(date: string, force = false): Promise<void> {
       if (saved && Date.now() - new Date(saved.syncedAt).getTime() < MIN_INTERVAL_MS) return;
     }
     const day = await readHealthDay(date, energyPlan(app.settings.profile, weightForCalc()).bmr);
+    // Se questa volta i dati app per app non si sono letti, si tengono quelli dell'ultima lettura.
+    if (!day.sources) {
+      const saved = await healthFor(db, date);
+      if (saved?.sources) day.sources = saved.sources;
+    }
     await saveHealth(db, day);
   })().finally(() => running.delete(date));
   running.set(date, job);

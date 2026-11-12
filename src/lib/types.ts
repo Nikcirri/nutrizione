@@ -109,16 +109,41 @@ export interface HealthWorkout {
   kcal: number | null;
   /** Manca nei dati salvati prima della 0.8.1. */
   kcalFrom?: WorkoutKcalFrom;
+  /** Marca o nome del dispositivo, da mostrare. */
   source?: string;
+  /** Pacchetto dell'app che ha registrato l'allenamento (dalla 0.9.1). */
+  sourceApp?: string;
+}
+
+/** Totali di un giorno scritti in Health Connect da una sola app (vedi `logic/healthSources.ts`). */
+export interface HealthSource {
+  /** Nome del pacchetto dell'app. */
+  id: string;
+  /** Nome da mostrare ("Mi Fitness", "Telefono"…). */
+  name: string;
+  /** Marca e modello del dispositivo, se l'app li scrive. */
+  device: string | null;
+  /** Orologio, braccialetto o anello. */
+  wearable: boolean;
+  /** null se l'app non scrive questo dato. */
+  steps: number | null;
+  activeKcal: number | null;
 }
 
 /** Dati letti da Health Connect per un giorno. */
 export interface HealthDay {
   date: string;
+  /** Calorie attive e passi mostrati: dell'app scelta (vedi `applySource`), altrimenti di tutte le app insieme. */
   activeKcal: number;
   steps: number;
   workouts: HealthWorkout[];
   syncedAt: string;
+  /** Totali di Health Connect con tutte le app insieme (dalla 0.9.1). */
+  merged?: { steps: number; activeKcal: number };
+  /** Totali app per app (dalla 0.9.1). */
+  sources?: HealthSource[];
+  /** App da cui vengono passi e calorie mostrati; null = tutte insieme. Lo mette `applySource`. */
+  sourceId?: string | null;
 }
 
 /** Un piatto riconosciuto con l'AI e salvato, da riaggiungere in un tocco. */
@@ -177,6 +202,8 @@ export interface Prefs {
   fastPlanHours: number;
   fastNotify: boolean;
   healthConnected: boolean;
+  /** Da dove prendere passi e calorie: 'auto' (l'orologio), 'all' (tutte le app insieme) o il pacchetto di un'app. */
+  healthSource: string;
 }
 
 export interface UpdateState {

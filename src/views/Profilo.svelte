@@ -23,7 +23,9 @@
   import { readBackupFile, restoreBackup, shareBackup } from '../lib/services/backupFile';
   import { healthAuthorized, openHealthSettings } from '../lib/services/health';
   import { db } from '../lib/db';
-  import { getAiKey, setAiKey } from '../lib/repo';
+  import { getAiKey, healthDayFor, setAiKey } from '../lib/repo';
+  import { appName } from '../lib/logic/healthSources';
+  import { useLive } from '../lib/state/live.svelte';
   import AiKeyForm from '../lib/ui/AiKeyForm.svelte';
   import { checkUpdateNow, installUpdate } from '../lib/state/update.svelte';
   import { app, currentTargets, initApp, sheets, updateSettings, weightForCalc } from '../lib/state/app.svelte';
@@ -41,6 +43,14 @@
   const targets = $derived(currentTargets());
   const year = new Date().getFullYear();
   let healthGranted = $state<boolean | null>(null);
+  // Dati di oggi app per app: per scegliere da dove prendere passi e calorie e capire le differenze.
+  const todayHealth = useLive(() => app.today, (d) => healthDayFor(db, d), undefined);
+  const sourceOptions = $derived.by(() => {
+    const list = (todayHealth.current?.sources ?? []).map((s) => ({ id: s.id, name: s.device ? `${s.name} (${s.device})` : s.name }));
+    const pref = prefs.healthSource;
+    if (pref !== 'auto' && pref !== 'all' && !list.some((s) => s.id === pref)) list.push({ id: pref, name: appName(pref) });
+    return list;
+  });
   let checking = $state(false);
   let aiKey = $state<string | null>(null);
   let changingKey = $state(false);
@@ -334,6 +344,40 @@
       <Icon name="chevronRight" size={20} />
     </button>
   {/if}
+  {#if prefs.healthConnected}
+    <div class="inner stack">
+      <label class="field">
+        <span>Passi e calorie da</span>
+        <select class="input" value={prefs.healthSource} onchange={(e) => set((s) => (s.prefs.healthSource = (e.currentTarget as HTMLSelectElement).value))}>
+          <option value="auto">Automatico: l’orologio</option>
+          {#each sourceOptions as o (o.id)}<option value={o.id}>{o.name}</option>{/each}
+          <option value="all">Tutte le app insieme (Health Connect)</option>
+        </select>
+      </label>
+      {#if todayHealth.current?.sources?.length}
+        {@const day = todayHealth.current}
+        <div class="sources" aria-label="Oggi in Health Connect">
+          <p class="sources-title">Oggi in Health Connect</p>
+          {#each day.sources ?? [] as s (s.id)}
+            <div class="source-row" class:used={day.sourceId === s.id}>
+              <span class="source-name">{s.name}{day.sourceId === s.id ? ' · in uso' : ''}</span>
+              <span class="source-value num">{s.steps === null ? '–' : fmtInt(s.steps)} passi · {s.activeKcal === null ? '–' : fmtInt(s.activeKcal)} kcal</span>
+            </div>
+          {/each}
+          {#if day.merged}
+            <div class="source-row" class:used={day.sourceId === null}>
+              <span class="source-name">Tutte insieme{day.sourceId === null ? ' · in uso' : ''}</span>
+              <span class="source-value num">{fmtInt(day.merged.steps)} passi · {fmtInt(day.merged.activeKcal)} kcal</span>
+            </div>
+          {/if}
+        </div>
+      {/if}
+      <p class="note tight">
+        Health Connect mette insieme i dati di più app (per esempio orologio e telefono) e dove si sovrappongono ne tiene una sola: per questo i suoi
+        totali possono essere diversi da quelli dell’app dell’orologio. In automatico l’app usa solo l’orologio.
+      </p>
+    </div>
+  {/if}
   <label class="switch-row">
     <span class="grow">Aggiungi le calorie bruciate all’obiettivo<span class="sub">Se fai sport puoi mangiare di più quel giorno</span></span>
     <input type="checkbox" class="switch" checked={prefs.addActivityKcal} onchange={(e) => set((s) => (s.prefs.addActivityKcal = (e.currentTarget as HTMLInputElement).checked))} />
@@ -488,6 +532,44 @@
   .inner {
     padding: 12px 16px 16px;
     border-top: 1px solid var(--border);
+  }
+  .sources {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: var(--surface-2);
+  }
+  .sources-title {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+  }
+  /* Nome dell'app e numeri: se non stanno su una riga i numeri vanno a capo. */
+  .source-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    column-gap: 10px;
+    font-size: 0.875rem;
+  }
+  .source-row.used {
+    font-weight: 600;
+  }
+  .source-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .source-value {
+    flex: 0 1 auto;
+    margin-left: auto;
+    color: var(--text-muted);
+  }
+  .source-row.used .source-value {
+    color: var(--text);
   }
   .readonly {
     display: flex;

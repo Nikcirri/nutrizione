@@ -1,5 +1,6 @@
 import type { Goals, MealPct, Prefs, Profile, Settings, UpdateState } from '../types';
 import { ACTIVITY_LEVELS, DEFAULT_MEAL_PCT, GOAL_TYPES, RATES } from './goals';
+import { sanitizeSourcePref } from './healthSources';
 
 export const DEFAULT_PROFILE: Profile = {
   sex: 'm',
@@ -29,6 +30,7 @@ export const DEFAULT_PREFS: Prefs = {
   fastPlanHours: 16,
   fastNotify: true,
   healthConnected: false,
+  healthSource: 'auto',
 };
 
 export const DEFAULT_UPDATES: UpdateState = { lastCheck: null, latestVersion: null, apkUrl: null, pageUrl: null };
@@ -114,6 +116,7 @@ export function sanitizeSettings(raw: unknown, now: Date = new Date()): Settings
     fastPlanHours: Math.round(numIn(pr.fastPlanHours, 1, 72, d.prefs.fastPlanHours)),
     fastNotify: bool(pr.fastNotify, d.prefs.fastNotify),
     healthConnected: bool(pr.healthConnected, d.prefs.healthConnected),
+    healthSource: sanitizeSourcePref(pr.healthSource),
   };
   const updates: UpdateState = {
     lastCheck: strOrNull(u.lastCheck),

@@ -53,22 +53,62 @@ interface Collected {
   coarse: boolean;
 }
 
-/** Somma, app per app, la parte di ogni dato che cade nei minuti dell'allenamento. */
+/** Quanto si guarda prima e dopo l'allenamento per capire il movimento "normale" di quel momento. */
+const AROUND_MS = 2 * 60 * MINUTE;
+
+function usable(r: EnergyRecord): boolean {
+  const dur = r.end - r.start;
+  return Number.isFinite(dur) && dur > 0 && Number.isFinite(r.kcal) && r.kcal >= 0;
+}
+
+/**
+ * Calorie al millisecondo fuori dall'allenamento, dai dati della stessa app nelle due ore prima e dopo.
+ * null se non ce ne sono abbastanza (almeno mezz'ora).
+ */
+function rateAround(records: readonly EnergyRecord[], source: string, w: WorkoutSpan): number | null {
+  const workoutMs = w.end - w.start;
+  let kcal = 0;
+  let ms = 0;
+  for (const r of records) {
+    if (r.source !== source || !usable(r) || isCoarse(r.end - r.start, workoutMs)) continue;
+    const outside = r.end <= w.start || r.start >= w.end;
+    if (!outside || r.end <= w.start - AROUND_MS || r.start >= w.end + AROUND_MS) continue;
+    kcal += r.kcal;
+    ms += r.end - r.start;
+  }
+  return ms >= 30 * MINUTE ? kcal / ms : null;
+}
+
+/**
+ * Somma, app per app, la parte di ogni dato che cade nei minuti dell'allenamento.
+ * Un dato a cavallo dell'inizio o della fine (Mi Fitness scrive blocchi di mezz'ora) non si divide in
+ * proporzione al tempo: durante l'allenamento si brucia molto di più. Si toglie solo quello che, fuori
+ * dall'allenamento, si brucia di solito in quei minuti (misurato sui dati vicini). Il risultato resta
+ * comunque tra la parte in proporzione e il dato intero.
+ */
 function collect(records: readonly EnergyRecord[], w: WorkoutSpan): Collected {
   const workoutMs = w.end - w.start;
   const sums = new Map<string, SourceSum>();
+  const rates = new Map<string, number | null>();
   let coarse = false;
   for (const r of records) {
+    if (!usable(r)) continue;
     const dur = r.end - r.start;
-    if (!Number.isFinite(dur) || dur <= 0 || !Number.isFinite(r.kcal) || r.kcal < 0) continue;
     const overlap = Math.min(r.end, w.end) - Math.max(r.start, w.start);
     if (overlap <= 0) continue;
     if (isCoarse(dur, workoutMs)) {
       coarse = true;
       continue;
     }
+    const proportional = (r.kcal * overlap) / dur;
+    let part = proportional;
+    if (overlap < dur) {
+      if (!rates.has(r.source)) rates.set(r.source, rateAround(records, r.source, w));
+      const rate = rates.get(r.source);
+      if (rate !== null && rate !== undefined) part = Math.min(r.kcal, Math.max(proportional, r.kcal - (dur - overlap) * rate));
+    }
     const s = sums.get(r.source) ?? { kcal: 0, covered: 0 };
-    s.kcal += (r.kcal * overlap) / dur;
+    s.kcal += part;
     s.covered += overlap;
     sums.set(r.source, s);
   }

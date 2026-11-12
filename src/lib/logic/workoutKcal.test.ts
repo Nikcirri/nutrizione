@@ -52,6 +52,20 @@ describe('calorie degli allenamenti', () => {
     expect(workoutKcal(w, [], total, BMR)).toEqual({ kcal: 164, from: 'total' });
   });
 
+  it('blocchi di mezz’ora a cavallo dell’allenamento (Mi Fitness): si toglie solo il movimento normale', () => {
+    // Come l'11 novembre: 115 kcal dalle 19:00 alle 19:30 e 140 dalle 19:30 alle 20:00, allenamento 19:12–19:48.
+    const half = (h: number, m: number, kcal: number): EnergyRecord => ({ start: T(h, m), end: T(h, m) + 30 * MIN, kcal, source: MI });
+    const around = [half(17, 0, 10), half(17, 30, 8), half(18, 0, 12), half(18, 30, 12), half(20, 0, 22), half(20, 30, 14), half(21, 0, 10), half(21, 30, 12)];
+    const records = [...around, half(19, 0, 115), half(19, 30, 140)];
+    // Fuori dall'allenamento: 100 kcal in 4 ore. Nei 24 minuti fuori dall'allenamento si tolgono 10 kcal: 255 − 10 = 245.
+    expect(workoutKcal(workout, records, [], BMR)).toEqual({ kcal: 245, from: 'watch' });
+    // Senza dati vicini si torna alla divisione in proporzione al tempo (115 × 18/30 + 140 × 18/30 = 153).
+    expect(workoutKcal(workout, [half(19, 0, 115), half(19, 30, 140)], [], BMR)).toEqual({ kcal: 153, from: 'watch' });
+    // Il blocco del telefono che copre tutta la giornata non cambia niente.
+    const phone: EnergyRecord = { start: T(0), end: T(19, 49), kcal: 550, source: 'android' };
+    expect(workoutKcal(workout, [phone, ...records], [], BMR).kcal).toBe(245);
+  });
+
   it('due app con lo stesso dato: si usa quella dell’allenamento, mai la somma', () => {
     const records: EnergyRecord[] = [
       { start: T(19, 12), end: T(19, 48), kcal: 238, source: MI },
