@@ -18,6 +18,10 @@ import {
   pauseUntil,
   describeAttempts,
   isTimeoutError,
+  GRACE_MS,
+  OVERALL_MS,
+  raceStep,
+  STAGGER_MS,
   parseAiMeal,
   scaleItem,
   waitingMessage,
@@ -203,5 +207,32 @@ describe('AI: nessuna risposta in tempo', () => {
     expect(describeAttempts([{ model: 'gemini-3.8-flash', outcome: 'timeout' }, { model: 'gemini-3.6-flash', outcome: 'ok' }])).toBe(
       '3.8 Flash: nessuna risposta in tempo · 3.6 Flash: ok',
     );
+  });
+});
+
+describe('AI: più modelli a scaglioni', () => {
+  const base = { total: 3, lastIsSlow: false, sinceLastStart: 0, sinceFirstOk: null, elapsed: 0 };
+  it('si parte dal migliore e, se tarda, si avvia il successivo', () => {
+    expect(raceStep({ ...base, results: [] })).toEqual({ type: 'start' });
+    expect(raceStep({ ...base, results: [null], sinceLastStart: 3000, elapsed: 3000 })).toEqual({ type: 'wait' });
+    expect(raceStep({ ...base, results: [null], sinceLastStart: STAGGER_MS, elapsed: STAGGER_MS })).toEqual({ type: 'start' });
+    // Limite finito o errore: il successivo parte subito.
+    expect(raceStep({ ...base, results: ['fail'], sinceLastStart: 500, elapsed: 500 })).toEqual({ type: 'start' });
+    // Un modello lento con le foto non ha vantaggio.
+    expect(raceStep({ ...base, results: [null], lastIsSlow: true })).toEqual({ type: 'start' });
+  });
+
+  it('vince la prima risposta buona, ma il migliore ha qualche secondo di vantaggio', () => {
+    expect(raceStep({ ...base, results: ['ok', null] })).toEqual({ type: 'use', index: 0 });
+    expect(raceStep({ ...base, results: [null, null, 'ok'], sinceFirstOk: 1000, elapsed: 20000 })).toEqual({ type: 'wait' });
+    expect(raceStep({ ...base, results: [null, null, 'ok'], sinceFirstOk: GRACE_MS, elapsed: 25000 })).toEqual({ type: 'use', index: 2 });
+    expect(raceStep({ ...base, results: ['fail', 'ok', null], sinceFirstOk: 0 })).toEqual({ type: 'use', index: 1 });
+  });
+
+  it('chiave sbagliata: ci si ferma; tutti finiti o tempo scaduto: si chiude', () => {
+    expect(raceStep({ ...base, results: [null, 'stop'] })).toEqual({ type: 'stop', index: 1 });
+    expect(raceStep({ ...base, results: ['fail', 'empty', 'fail'] })).toEqual({ type: 'finish' });
+    expect(raceStep({ ...base, results: [null, null, null], elapsed: OVERALL_MS })).toEqual({ type: 'finish' });
+    expect(raceStep({ ...base, total: 1, results: [null], sinceLastStart: 30000, elapsed: 30000 })).toEqual({ type: 'wait' });
   });
 });

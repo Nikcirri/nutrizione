@@ -5,7 +5,8 @@ import { looksBlank } from '../logic/ai';
 import { isNative } from '../platform';
 
 /** Abbastanza dettaglio per riconoscere anche piatti con tanti ingredienti, senza rallentare l'invio. */
-const MAX_SIDE = 1024;
+// 768 px bastano a Gemini (lavora a riquadri di 768) e la foto pesa circa la metà.
+const MAX_SIDE = 768;
 /** La fotocamera consegna già una foto non enorme: meno memoria e meno attesa sul telefono. */
 const CAMERA_SIDE = 1600;
 
@@ -115,7 +116,7 @@ export async function prepareImage(blob: Blob): Promise<PreparedImage> {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas non disponibile');
     ctx.drawImage(bitmap, 0, 0, w, h);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
     return { dataUrl, mime: 'image/jpeg', base64: dataUrl.slice(dataUrl.indexOf(',') + 1) };
   } finally {
     bitmap.close();

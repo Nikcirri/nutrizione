@@ -1,5 +1,13 @@
 # Novità
 
+## [0.9.2] - 2026-11-12
+
+- Foto AI molto più veloce: i modelli non si aspettano più uno dopo l'altro.
+- Se il modello migliore tarda, parte anche il successivo e vince la prima risposta.
+- L'app ricorda i modelli lenti con le foto e per un giorno non li aspetta.
+- Prima, con la foto, ogni modello Flash poteva tenere fermi fino a 45 secondi prima di passare al successivo: in tutto fino a 2 minuti. Ora parte il modello migliore e, se dopo 8 secondi non ha risposto, parte anche il successivo; un modello migliore ancora in corsa ha 6 secondi di vantaggio.
+- La foto inviata è più leggera (768 pixel) e la richiesta passa dalla connessione del browser dell'app.
+
 ## [0.9.1] - 2026-11-12
 
 - Passi e calorie ora arrivano solo dall'orologio, come in Mi Fitness.

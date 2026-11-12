@@ -313,7 +313,7 @@ export function pauseUntil(status: number, json: unknown, now: number): number |
 }
 
 /** Com'è andato un tentativo con un modello (per spiegare all'utente cosa non ha funzionato). */
-export type AttemptOutcome = 'ok' | 'empty' | 'unreadable' | 'quota' | 'model' | 'error' | 'timeout' | 'network';
+export type AttemptOutcome = 'ok' | 'empty' | 'unreadable' | 'quota' | 'model' | 'error' | 'timeout' | 'network' | 'slower';
 
 export interface AiAttempt {
   model: string;
@@ -339,7 +339,61 @@ const OUTCOME_TEXT: Record<AttemptOutcome, string> = {
   error: 'errore',
   timeout: 'nessuna risposta in tempo',
   network: 'nessuna connessione',
+  slower: 'più lento di un altro',
 };
+
+// ---------- Più modelli a scaglioni ----------
+//
+// Con una foto i modelli Flash a volte ci mettono più di 45 secondi, il Flash-Lite una decina. Aspettarli
+// uno dopo l'altro voleva dire minuti. Ora si parte dal migliore e, se tarda, si avvia anche il successivo:
+// vince la prima risposta buona, ma un modello migliore ancora in corsa ha qualche secondo di vantaggio.
+
+/** Dopo quanto, senza risposta, si avvia anche il modello successivo. */
+export const STAGGER_MS = 8_000;
+/** Con una risposta buona di un modello più leggero, quanto si aspetta ancora quelli migliori. */
+export const GRACE_MS = 6_000;
+/** Tempo massimo per tutta l'analisi. */
+export const OVERALL_MS = 75_000;
+
+/** Come è finita la richiesta a un modello: null = ancora in corso. */
+export type RaceKind = 'ok' | 'empty' | 'fail' | 'stop';
+
+export interface RaceState {
+  /** Un elemento per modello avviato, in ordine dal migliore. */
+  results: readonly (RaceKind | null)[];
+  /** Modelli disponibili in tutto. */
+  total: number;
+  /** Il modello avviato per ultimo è stato lento con le foto di recente: il successivo parte subito. */
+  lastIsSlow: boolean;
+  sinceLastStart: number;
+  /** Da quanto è arrivata la prima risposta buona (null = nessuna). */
+  sinceFirstOk: number | null;
+  elapsed: number;
+}
+
+export type RaceAction = { type: 'start' } | { type: 'wait' } | { type: 'use'; index: number } | { type: 'stop'; index: number } | { type: 'finish' };
+
+/** Cosa fare adesso nella gara tra i modelli (funzione pura, vedi `analyzeMeal`). */
+export function raceStep(s: RaceState): RaceAction {
+  const stop = s.results.indexOf('stop');
+  if (stop >= 0) return { type: 'stop', index: stop };
+  const ok = s.results.indexOf('ok');
+  if (ok >= 0) {
+    const betterPending = s.results.slice(0, ok).some((r) => r === null);
+    if (!betterPending || (s.sinceFirstOk ?? 0) >= GRACE_MS || s.elapsed >= OVERALL_MS) return { type: 'use', index: ok };
+    return { type: 'wait' };
+  }
+  const pending = s.results.filter((r) => r === null).length;
+  const canStart = s.results.length < s.total && s.elapsed < OVERALL_MS;
+  if (canStart && (pending === 0 || s.lastIsSlow || s.sinceLastStart >= STAGGER_MS)) return { type: 'start' };
+  if (pending === 0 || s.elapsed >= OVERALL_MS) return { type: 'finish' };
+  return { type: 'wait' };
+}
+
+/** Modelli lenti con le foto: modello → fino a quando (millisecondi). */
+export type SlowModels = Record<string, number>;
+/** Per quanto un modello lento con le foto non ha più il vantaggio di partire da solo. */
+export const SLOW_FOR_MS = 24 * 60 * 60 * 1000;
 
 /** Riga breve con i tentativi fatti, es. "3.8 Flash: limite gratuito raggiunto · 3.6 Flash: nessun cibo riconosciuto". */
 export function describeAttempts(attempts: AiAttempt[]): string {

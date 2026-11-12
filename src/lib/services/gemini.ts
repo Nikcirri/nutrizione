@@ -1,5 +1,5 @@
 // Analisi del piatto con Google Gemini (chiave personale dell'utente, presa da Google AI Studio).
-// Nell'app Android la richiesta parte dal telefono con CapacitorHttp.
+// La richiesta parte dal telefono: prima con il fetch della WebView, di riserva con CapacitorHttp.
 import { CapacitorHttp } from '@capacitor/core';
 import { db } from '../db';
 import {
@@ -11,13 +11,19 @@ import {
   MEAL_SCHEMA,
   modelsToTry,
   parseAiMeal,
+  OVERALL_MS,
   pauseUntil,
   problemMessage,
+  raceStep,
+  SLOW_FOR_MS,
   type AiAttempt,
   type AiMeal,
+  type AttemptOutcome,
   type GeminiProblem,
   type ModelPauses,
   type PromptContext,
+  type RaceKind,
+  type SlowModels,
 } from '../logic/ai';
 import { UserError } from '../errors';
 import { isNative } from '../platform';
@@ -36,6 +42,8 @@ const TIMEOUT_MS = 45_000;
 /** Dopo un blocco della richiesta completa, per un giorno si usa subito quella leggera. */
 const LIGHT_KEY = 'aiLightUntil';
 const LIGHT_FOR_MS = 24 * 60 * 60 * 1000;
+/** Modelli lenti con le foto (vedi `SlowModels`). */
+const SLOW_KEY = 'aiSlowWithPhoto';
 
 /** La richiesta non è arrivata a Gemini (rete) o Gemini non ha risposto in tempo. */
 class NetProblem extends Error {
@@ -49,36 +57,62 @@ interface HttpResult {
   data: unknown;
 }
 
-async function request(method: 'GET' | 'POST', url: string, key: string, body?: unknown, timeoutMs = TIMEOUT_MS): Promise<HttpResult> {
+async function request(
+  method: 'GET' | 'POST',
+  url: string,
+  key: string,
+  body?: unknown,
+  timeoutMs = TIMEOUT_MS,
+  signal?: AbortSignal,
+): Promise<HttpResult> {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     throw new UserError('Sei offline: collegati a internet e riprova.');
   }
   const headers: Record<string, string> = { 'x-goog-api-key': key, Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  // Prima il fetch della WebView (Gemini accetta richieste dal browser): con una foto il ponte nativo di
+  // CapacitorHttp era lentissimo (nessuna risposta in tempo da tutti i modelli). Il ponte resta di riserva.
   try {
-    if (isNative()) {
-      const res = await CapacitorHttp.request({
-        method,
-        url,
-        headers,
-        data: body,
-        connectTimeout: 15_000,
-        readTimeout: timeoutMs,
-        responseType: 'json',
-      });
-      return { status: res.status, data: typeof res.data === 'string' ? safeJson(res.data) : res.data };
-    }
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl.signal });
-      return { status: res.status, data: safeJson(await res.text()) };
-    } finally {
-      clearTimeout(timer);
-    }
+    return await viaFetch(method, url, headers, body, timeoutMs, signal);
   } catch (e) {
     if (e instanceof UserError) throw e;
+    if (isTimeoutError(e) || !isNative() || signal?.aborted) throw new NetProblem(isTimeoutError(e) ? 'timeout' : 'network');
+  }
+  try {
+    const res = await CapacitorHttp.request({
+      method,
+      url,
+      headers,
+      data: body,
+      connectTimeout: 15_000,
+      readTimeout: timeoutMs,
+      responseType: 'json',
+    });
+    return { status: res.status, data: typeof res.data === 'string' ? safeJson(res.data) : res.data };
+  } catch (e) {
     throw new NetProblem(isTimeoutError(e) ? 'timeout' : 'network');
+  }
+}
+
+async function viaFetch(
+  method: string,
+  url: string,
+  headers: Record<string, string>,
+  body: unknown,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<HttpResult> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  // Quando un altro modello ha già risposto, la richiesta si interrompe.
+  const stop = () => ctrl.abort();
+  signal?.addEventListener('abort', stop);
+  try {
+    const res = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl.signal });
+    return { status: res.status, data: safeJson(await res.text()) };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', stop);
   }
 }
 
@@ -118,6 +152,25 @@ function preferLight(): void {
   void db.kv.put({ key: LIGHT_KEY, value: Date.now() + LIGHT_FOR_MS }).catch(() => undefined);
 }
 
+async function getSlowModels(): Promise<SlowModels> {
+  const row = await db.kv.get(SLOW_KEY).catch(() => undefined);
+  const v = row?.value;
+  const out: SlowModels = {};
+  if (typeof v === 'object' && v !== null) {
+    for (const [k, until] of Object.entries(v as Record<string, unknown>)) if (typeof until === 'number' && until > Date.now()) out[k] = until;
+  }
+  return out;
+}
+
+function saveSlowModels(slow: SlowModels): void {
+  void db.kv.put({ key: SLOW_KEY, value: slow }).catch(() => undefined);
+}
+
+/** Come è finita la richiesta a un modello. */
+type ModelResult =
+  | { kind: 'ok' | 'empty'; meal: AiMeal; outcome: AttemptOutcome }
+  | { kind: 'fail' | 'stop'; outcome: AttemptOutcome; problem: GeminiProblem; unreadable?: boolean };
+
 /** Errore della Foto AI con, in più, una riga tecnica breve su cosa è successo con ogni modello. */
 export class AiError extends UserError {
   constructor(
@@ -150,77 +203,135 @@ export async function analyzeMeal(
   const prompt = buildPrompt(description, image !== null, context);
   const pauses: ModelPauses = await getModelPauses(db).catch(() => ({}));
   const models = modelsToTry(MODELS, pauses, Date.now());
-  const attempts: AiAttempt[] = [];
-  let empty: { meal: AiMeal; model: string } | null = null;
-  let lastProblem: GeminiProblem = 'other';
-  let mode: Mode = (await lightPreferred()) ? 'light' : 'full';
+  const slow = image ? await getSlowModels() : {};
+  const mode: Mode = (await lightPreferred()) ? 'light' : 'full';
   const savePauses = () => void setModelPauses(db, pauses).catch(() => undefined);
+  const t0 = Date.now();
+  const deadline = t0 + OVERALL_MS;
 
-  for (const model of models) {
+  /** Una richiesta a un modello, con i ripieghi (formato più semplice se non accetta le impostazioni). */
+  async function runModel(model: string, signal: AbortSignal): Promise<ModelResult> {
     const url = `${BASE}/models/${model}:generateContent`;
+    const limit = () => Math.max(1000, Math.min(mode === 'full' ? FULL_TIMEOUT_MS : TIMEOUT_MS, deadline - Date.now()));
     let res: HttpResult;
     try {
-      res = await request('POST', url, key, body(prompt, image, mode), mode === 'full' ? FULL_TIMEOUT_MS : TIMEOUT_MS);
+      res = await request('POST', url, key, body(prompt, image, mode), limit(), signal);
       if (res.status === 400 && geminiProblem(res.status, res.data) === 'other') {
-        res = await request('POST', url, key, body(prompt, image, 'bare'));
+        res = await request('POST', url, key, body(prompt, image, 'bare'), limit(), signal);
       }
     } catch (e) {
       if (!(e instanceof NetProblem)) throw e;
-      attempts.push({ model, outcome: e.kind });
-      lastProblem = e.kind;
-      // Senza rete è inutile provare gli altri modelli.
-      if (e.kind === 'network') break;
-      // Nessuna risposta: si passa al modello successivo e da qui in poi si chiede in modo leggero,
-      // che non si blocca (e per un giorno si parte già così).
-      if (mode === 'full') {
-        mode = 'light';
-        preferLight();
-      }
-      continue;
+      // Il formato completo a volte fa bloccare Gemini: per un giorno si chiede in modo leggero.
+      if (e.kind === 'timeout' && mode === 'full' && !signal.aborted) preferLight();
+      return e.kind === 'network'
+        ? { kind: 'stop', outcome: 'network', problem: 'network' }
+        : { kind: 'fail', outcome: 'timeout', problem: 'timeout' };
     }
-
     if (res.status < 200 || res.status >= 300) {
-      lastProblem = geminiProblem(res.status, res.data);
+      const problem = geminiProblem(res.status, res.data);
       const until = pauseUntil(res.status, res.data, Date.now());
       if (until !== null) {
         pauses[model] = until;
         savePauses();
       }
-      attempts.push({ model, outcome: lastProblem === 'quota' ? 'quota' : lastProblem === 'model' ? 'model' : 'error' });
+      const outcome: AttemptOutcome = problem === 'quota' ? 'quota' : problem === 'model' ? 'model' : 'error';
       // Chiave sbagliata, zona non servita, contenuto bloccato: inutile provare altri modelli.
-      if (lastProblem === 'key' || lastProblem === 'region' || lastProblem === 'blocked') break;
-      continue;
+      const stop = problem === 'key' || problem === 'region' || problem === 'blocked';
+      return { kind: stop ? 'stop' : 'fail', outcome, problem };
     }
-
     if (pauses[model]) {
       delete pauses[model];
       savePauses();
     }
     const text = geminiText(res.data);
-    if (!text && geminiProblem(res.status, res.data) === 'blocked') {
-      lastProblem = 'blocked';
-      attempts.push({ model, outcome: 'error' });
-      break;
-    }
+    if (!text && geminiProblem(res.status, res.data) === 'blocked') return { kind: 'stop', outcome: 'error', problem: 'blocked' };
     const meal = parseAiMeal(text);
-    if (!meal) {
-      attempts.push({ model, outcome: 'unreadable' });
-      continue;
-    }
-    if (!meal.items.length) {
-      attempts.push({ model, outcome: 'empty' });
-      empty ??= { meal, model };
-      continue;
-    }
-    attempts.push({ model, outcome: 'ok' });
-    return { meal, model, detail: attempts.length > 1 ? describeAttempts(attempts) : '' };
+    if (!meal) return { kind: 'fail', outcome: 'unreadable', problem: 'other', unreadable: true };
+    if (!meal.items.length) return { kind: 'empty', meal, outcome: 'empty' };
+    return { kind: 'ok', meal, outcome: 'ok' };
   }
 
+  // Gara a scaglioni (regole in `raceStep`): si parte dal migliore e, se tarda, si avvia anche il successivo.
+  const runs: { model: string; ctrl: AbortController; result: ModelResult | null; startedAt: number }[] = [];
+  let firstOkAt: number | null = null;
+  let wake: () => void = () => undefined;
+  const start = () => {
+    const model = models[runs.length]!;
+    const run = { model, ctrl: new AbortController(), result: null as ModelResult | null, startedAt: Date.now() };
+    runs.push(run);
+    void runModel(model, run.ctrl.signal)
+      .catch((e: unknown): ModelResult => ({ kind: 'stop', outcome: 'error', problem: e instanceof UserError ? 'network' : 'other' }))
+      .then((r) => {
+        run.result = r;
+        if (r.kind === 'ok' && firstOkAt === null) firstOkAt = Date.now();
+        wake();
+      });
+  };
+
+  let outcome: { type: 'use' | 'stop'; index: number } | { type: 'finish' };
+  for (;;) {
+    const now = Date.now();
+    const last = runs[runs.length - 1];
+    const step = raceStep({
+      results: runs.map((r): RaceKind | null => r.result?.kind ?? null),
+      total: models.length,
+      lastIsSlow: last !== undefined && last.model in slow,
+      sinceLastStart: last ? now - last.startedAt : 0,
+      sinceFirstOk: firstOkAt === null ? null : now - firstOkAt,
+      elapsed: now - t0,
+    });
+    if (step.type === 'start') {
+      start();
+      continue;
+    }
+    if (step.type === 'wait') {
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+        setTimeout(resolve, 500);
+      });
+      continue;
+    }
+    outcome = step;
+    break;
+  }
+
+  // Le richieste ancora in corso non servono più.
+  for (const r of runs) if (!r.result) r.ctrl.abort();
+
+  // Con una foto: chi non ha risposto (o è stato superato) parte senza vantaggio per un giorno; chi ha risposto bene lo riprende.
+  if (image) {
+    let changed = false;
+    for (const r of runs) {
+      if (!r.result || r.result.outcome === 'timeout') {
+        slow[r.model] = Date.now() + SLOW_FOR_MS;
+        changed = true;
+      } else if (r.result.kind === 'ok' && r.model in slow) {
+        delete slow[r.model];
+        changed = true;
+      }
+    }
+    if (changed) saveSlowModels(slow);
+  }
+
+  const attempts: AiAttempt[] = runs.map((r) => ({ model: r.model, outcome: r.result?.outcome ?? (outcome.type === 'use' ? 'slower' : 'timeout') }));
   const detail = describeAttempts(attempts);
-  if (empty) return { ...empty, detail };
-  if (attempts.some((a) => a.outcome === 'unreadable') && lastProblem !== 'key' && lastProblem !== 'region' && lastProblem !== 'blocked') {
+  if (outcome.type === 'use') {
+    const r = runs[outcome.index]!.result as { meal: AiMeal };
+    return { meal: r.meal, model: runs[outcome.index]!.model, detail: attempts.length > 1 ? detail : '' };
+  }
+  if (outcome.type === 'stop') {
+    const r = runs[outcome.index]!.result as { problem: GeminiProblem };
+    throw new AiError(problemMessage(r.problem), detail);
+  }
+  const empty = runs.find((r) => r.result?.kind === 'empty');
+  if (empty?.result && 'meal' in empty.result) return { meal: empty.result.meal, model: empty.model, detail };
+  const results = runs.map((r) => r.result);
+  if (results.some((r) => r && 'unreadable' in r && r.unreadable)) {
     throw new AiError('Gemini ha risposto in modo incompleto. Riprova: di solito la seconda volta va.', detail);
   }
+  // Il problema più utile da dire: un limite o un modello mancante prima di "non ha risposto in tempo".
+  const problems = results.map((r) => (r && 'problem' in r ? r.problem : 'timeout'));
+  const lastProblem: GeminiProblem = problems.includes('timeout') ? 'timeout' : (problems[problems.length - 1] ?? 'other');
   throw new AiError(problemMessage(lastProblem), detail);
 }
 
