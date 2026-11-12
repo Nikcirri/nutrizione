@@ -44,6 +44,10 @@ describe('consigli: prossimo pasto', () => {
     expect(nextMeal('cena', new Set(['cena']))).toBeNull();
     expect(nextMeal('spuntini', new Set(['spuntini']))).toBe('spuntini');
   });
+  it('non propone i pasti a 0% (chi salta la colazione)', () => {
+    expect(nextMeal('colazione', new Set(), new Set(['colazione']))).toBe('pranzo');
+    expect(nextMeal('spuntini', new Set(['spuntini']), new Set(['spuntini']))).toBe('cena');
+  });
   it('idee che stanno nelle calorie rimaste, prima quelle con proteine se mancano', () => {
     const a = nextMealAdvice('cena', 600, 600, true, false);
     expect(a.ideas.length).toBeGreaterThan(0);

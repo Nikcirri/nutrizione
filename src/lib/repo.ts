@@ -6,6 +6,7 @@ import { sanitizeSettings } from './logic/settings';
 import type { Activity, DiaryEntry, Dish, Fast, Food, HealthDay, MealId, Settings, WeightEntry } from './types';
 import { NO_HABITS, type AiHabits, type ModelPauses } from './logic/ai';
 import { normalize } from './logic/search';
+import { applyOverrides, sanitizeOverrides, withOverride, type WorkoutKcalOverrides } from './logic/workoutKcal';
 
 // ---------- Impostazioni ----------
 
@@ -251,6 +252,23 @@ export async function healthFor(db: NutriDB, date: string): Promise<HealthDay | 
   return db.health.get(date);
 }
 
+/** Calorie degli allenamenti scritte a mano (vedi `WorkoutKcalOverrides`). */
+export async function getWorkoutOverrides(db: NutriDB): Promise<WorkoutKcalOverrides> {
+  return sanitizeOverrides((await db.kv.get('workoutKcal'))?.value);
+}
+
+/** Salva (o toglie, con `kcal` null) le calorie di un allenamento prese dall'app dell'orologio. */
+export async function setWorkoutOverride(db: NutriDB, id: string, date: string, kcal: number | null, today: string): Promise<void> {
+  const next = withOverride(await getWorkoutOverrides(db), id, date, kcal, today);
+  await db.kv.put({ key: 'workoutKcal', value: next });
+}
+
+/** I dati di Health Connect di un giorno, con le calorie degli allenamenti scritte a mano. */
+export async function healthDayFor(db: NutriDB, date: string): Promise<HealthDay | undefined> {
+  const [day, overrides] = await Promise.all([db.health.get(date), getWorkoutOverrides(db)]);
+  return day ? { ...day, workouts: applyOverrides(day.workouts, overrides) } : undefined;
+}
+
 export async function saveHealth(db: NutriDB, day: HealthDay): Promise<void> {
   await db.health.put(plain(day));
 }
@@ -287,7 +305,7 @@ export async function deleteFast(db: NutriDB, id: number): Promise<Fast | undefi
 
 /** Tutto il database. Il contatore di sigarette non è qui: lo aggiunge chi crea il file di backup. */
 export async function exportAll(db: NutriDB): Promise<Omit<BackupData, 'cigarettes'>> {
-  const [settings, foods, entries, water, weights, activities, health, fasts, dishes] = await Promise.all([
+  const [settings, foods, entries, water, weights, activities, health, fasts, dishes, workoutKcal] = await Promise.all([
     loadSettings(db),
     db.foods.toArray(),
     db.entries.toArray(),
@@ -297,8 +315,9 @@ export async function exportAll(db: NutriDB): Promise<Omit<BackupData, 'cigarett
     db.health.toArray(),
     db.fasts.toArray(),
     db.dishes.toArray(),
+    getWorkoutOverrides(db),
   ]);
-  return { settings, foods, entries, water, weights, activities, health, fasts, dishes };
+  return { settings, foods, entries, water, weights, activities, health, fasts, dishes, workoutKcal };
 }
 
 /** Sostituisce tutti i dati del database con quelli del backup. */
@@ -323,5 +342,6 @@ export async function importAll(db: NutriDB, data: Omit<BackupData, 'cigarettes'
     await db.fasts.bulkPut(data.fasts);
     await db.dishes.bulkPut(data.dishes);
     await db.kv.put({ key: 'settings', value: { ...data.settings, onboarded: true } });
+    await db.kv.put({ key: 'workoutKcal', value: data.workoutKcal });
   });
 }

@@ -60,10 +60,12 @@ export function dayHints(i: DayHintInput): string[] {
  * Il prossimo pasto da suggerire: quello dell'ora attuale se è ancora vuoto, altrimenti il successivo
  * della giornata (lo spuntino va bene finché non hai cenato). null quando la giornata è finita.
  */
-export function nextMeal(hourMeal: MealId, filled: Set<MealId>): MealId | null {
+export function nextMeal(hourMeal: MealId, filled: Set<MealId>, skip: ReadonlySet<MealId> = new Set()): MealId | null {
   const order: MealId[] = ['colazione', 'pranzo', 'spuntini', 'cena'];
   for (let k = order.indexOf(hourMeal); k < order.length; k++) {
     const m = order[k]!;
+    // I pasti a cui nel Profilo è dato lo 0% (chi salta la colazione) non si propongono.
+    if (skip.has(m)) continue;
     if (!filled.has(m) || (m === 'spuntini' && !filled.has('cena'))) return m;
   }
   return null;
@@ -145,13 +147,9 @@ export const ESTIMATED_GUIDE = 'Porzioni stimate dalle calorie: questo alimento 
 
 // ---------- Spiegazioni al tocco ----------
 
-export type Topic = 'calorie' | 'carboidrati' | 'proteine' | 'grassi' | 'fibre' | 'acqua';
+export type Topic = 'carboidrati' | 'proteine' | 'grassi' | 'fibre' | 'acqua';
 
 export const EXPLAIN: Record<Topic, { title: string; text: string }> = {
-  calorie: {
-    title: 'Calorie',
-    text: 'Sono l’energia che il cibo ti dà. Se ne mangi più di quante ne consumi aumenti di peso, se ne mangi meno dimagrisci.\nEsempi: una mela ≈ 80 kcal, un piatto di pasta al pomodoro ≈ 450 kcal, un cucchiaio d’olio ≈ 90 kcal.',
-  },
   carboidrati: {
     title: 'Carboidrati',
     text: 'Sono il “carburante” principale: pane, pasta, riso, patate, frutta e dolci.\nMeglio quelli integrali e la frutta; zucchero e dolci con moderazione.',

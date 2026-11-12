@@ -1,4 +1,4 @@
-import type { ActivityLevel, Goals, GoalType, Profile, Sex } from '../types';
+import type { ActivityLevel, Goals, GoalType, MealId, MealPct, Profile, Sex } from '../types';
 import { ageFromBirthYear } from './dates';
 
 export const ACTIVITY_LEVELS: readonly { id: ActivityLevel; label: string; hint: string; factor: number }[] = [
@@ -145,6 +145,38 @@ export function balanceMacros(carbsPct: number, proteinPct: number): { carbsPct:
   const c = Math.min(90, Math.max(5, Math.round(carbsPct)));
   const p = Math.min(90 - c + 5, Math.max(5, Math.round(proteinPct)));
   return { carbsPct: c, proteinPct: p, fatPct: Math.max(5, 100 - c - p) };
+}
+
+/** Divisione delle calorie tra i pasti che l'app ha sempre usato. */
+export const DEFAULT_MEAL_PCT: MealPct = { colazione: 25, pranzo: 35, cena: 30, spuntini: 10 };
+
+/**
+ * Come per i macronutrienti: si scelgono colazione, pranzo e cena, e gli spuntini prendono quello che resta
+ * per arrivare a 100. Se i primi tre superano 100 si accorcia l'ultimo. Lo 0 è ammesso (chi salta la colazione).
+ */
+export function balanceMeals(colazione: number, pranzo: number, cena: number): MealPct {
+  const fit = (v: number, max: number) => Math.min(max, Math.max(0, Math.round(Number.isFinite(v) ? v : 0)));
+  const c = fit(colazione, 100);
+  const p = fit(pranzo, 100 - c);
+  const ce = fit(cena, 100 - c - p);
+  return { colazione: c, pranzo: p, cena: ce, spuntini: 100 - c - p - ce };
+}
+
+/** Quota delle calorie del giorno per un pasto (0,25 = un quarto). */
+export function mealShare(goals: Pick<Goals, 'mealPct'>, meal: MealId): number {
+  return goals.mealPct[meal] / 100;
+}
+
+export const MEAL_PRESETS: readonly { label: string; pct: MealPct }[] = [
+  { label: 'Classica', pct: DEFAULT_MEAL_PCT },
+  { label: 'Pranzo principale', pct: { colazione: 20, pranzo: 40, cena: 30, spuntini: 10 } },
+  { label: 'Cena principale', pct: { colazione: 20, pranzo: 30, cena: 40, spuntini: 10 } },
+  { label: 'Più spuntini', pct: { colazione: 20, pranzo: 30, cena: 30, spuntini: 20 } },
+  { label: 'Senza colazione', pct: { colazione: 0, pranzo: 45, cena: 40, spuntini: 15 } },
+];
+
+export function sameMealPct(a: MealPct, b: MealPct): boolean {
+  return a.colazione === b.colazione && a.pranzo === b.pranzo && a.cena === b.cena && a.spuntini === b.spuntini;
 }
 
 export const MACRO_PRESETS: readonly { label: string; carbsPct: number; proteinPct: number; fatPct: number }[] = [

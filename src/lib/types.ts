@@ -2,12 +2,16 @@
 
 export type MealId = 'colazione' | 'pranzo' | 'cena' | 'spuntini';
 
-export const MEALS: readonly { id: MealId; label: string; share: number }[] = [
-  { id: 'colazione', label: 'Colazione', share: 0.25 },
-  { id: 'pranzo', label: 'Pranzo', share: 0.35 },
-  { id: 'cena', label: 'Cena', share: 0.3 },
-  { id: 'spuntini', label: 'Spuntini', share: 0.1 },
+/** I pasti del diario. La quota di calorie di ognuno si sceglie nel Profilo (`Goals.mealPct`). */
+export const MEALS: readonly { id: MealId; label: string }[] = [
+  { id: 'colazione', label: 'Colazione' },
+  { id: 'pranzo', label: 'Pranzo' },
+  { id: 'cena', label: 'Cena' },
+  { id: 'spuntini', label: 'Spuntini' },
 ];
+
+/** Percentuale delle calorie del giorno per ogni pasto: la somma è 100. */
+export type MealPct = Record<MealId, number>;
 
 /** Valori nutrizionali: kcal, grammi per carboidrati, proteine, grassi, fibre, zuccheri, sale, grassi saturi. */
 export interface Nutrients {
@@ -93,6 +97,9 @@ export interface Activity {
   createdAt: string;
 }
 
+/** Da dove vengono le calorie di un allenamento (vedi `workoutKcal` in `logic/workoutKcal.ts`). */
+export type WorkoutKcalFrom = 'watch' | 'total' | 'day' | 'none' | 'manual';
+
 export interface HealthWorkout {
   id: string;
   type: string;
@@ -100,6 +107,8 @@ export interface HealthWorkout {
   start: string;
   minutes: number;
   kcal: number | null;
+  /** Manca nei dati salvati prima della 0.8.1. */
+  kcalFrom?: WorkoutKcalFrom;
   source?: string;
 }
 
@@ -155,6 +164,8 @@ export interface Goals {
   carbsPct: number;
   proteinPct: number;
   fatPct: number;
+  /** Divisione delle calorie tra i pasti (dalla 0.9.0; prima era fissa 25/35/30/10). */
+  mealPct: MealPct;
   autoWater: boolean;
   manualWaterMl: number;
 }

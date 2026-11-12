@@ -3,7 +3,20 @@
   import { reportError } from '../lib/errors';
   import { connectHealthFlow, disconnectHealth } from '../lib/healthSync';
   import { backupSummary } from '../lib/logic/backup';
-  import { ACTIVITY_LEVELS, GOAL_TYPES, MACRO_PRESETS, RATES, balanceMacros, energyPlan, minimumKcal, rateLabel, waterGoalMl } from '../lib/logic/goals';
+  import {
+    ACTIVITY_LEVELS,
+    GOAL_TYPES,
+    MACRO_PRESETS,
+    MEAL_PRESETS,
+    RATES,
+    balanceMacros,
+    balanceMeals,
+    energyPlan,
+    minimumKcal,
+    rateLabel,
+    sameMealPct,
+    waterGoalMl,
+  } from '../lib/logic/goals';
   import { fmtInt, fmtLiters, fmtOne } from '../lib/logic/nutrition';
   import { RELEASES_PAGE } from '../lib/logic/updates';
   import { APP_VERSION, isNative, openExternal } from '../lib/platform';
@@ -16,7 +29,7 @@
   import { app, currentTargets, initApp, sheets, updateSettings, weightForCalc } from '../lib/state/app.svelte';
   import { loadCigarettes } from '../lib/state/cigarettes.svelte';
   import { confirmDialog, showToast, withBusy } from '../lib/state/ui.svelte';
-  import type { Settings } from '../lib/types';
+  import { MEALS, type Settings } from '../lib/types';
   import Icon from '../lib/ui/Icon.svelte';
   import NumberField from '../lib/ui/NumberField.svelte';
   import { pickFile } from '../lib/ui/pickFile';
@@ -53,6 +66,13 @@
       s.goals.carbsPct = b.carbsPct;
       s.goals.proteinPct = b.proteinPct;
       s.goals.fatPct = b.fatPct;
+    });
+  }
+
+  function setMeals(colazione: number, pranzo: number, cena: number) {
+    const b = balanceMeals(colazione, pranzo, cena);
+    set((s) => {
+      s.goals.mealPct = b;
     });
   }
 
@@ -244,6 +264,27 @@
       <div class="field"><span>Grassi</span><div class="input num readonly">{goals.fatPct}%</div></div>
     </div>
     <p class="note tight">I grassi si adattano perché il totale faccia 100%.</p>
+  </div>
+</div>
+
+<h3 class="section-title">Calorie nei pasti</h3>
+<div class="list">
+  <div class="inner stack">
+    <div class="chips">
+      {#each MEAL_PRESETS as p (p.label)}
+        <button class="chip" aria-pressed={sameMealPct(goals.mealPct, p.pct)} onclick={() => setMeals(p.pct.colazione, p.pct.pranzo, p.pct.cena)}>{p.label}</button>
+      {/each}
+    </div>
+    <div class="grid-2">
+      <NumberField label="Colazione" value={goals.mealPct.colazione} min={0} max={100} integer suffix="%" onsave={(v) => setMeals(v, goals.mealPct.pranzo, goals.mealPct.cena)} />
+      <NumberField label="Pranzo" value={goals.mealPct.pranzo} min={0} max={100} integer suffix="%" onsave={(v) => setMeals(goals.mealPct.colazione, v, goals.mealPct.cena)} />
+      <NumberField label="Cena" value={goals.mealPct.cena} min={0} max={100} integer suffix="%" onsave={(v) => setMeals(goals.mealPct.colazione, goals.mealPct.pranzo, v)} />
+      <div class="field"><span>Spuntini</span><div class="input num readonly">{goals.mealPct.spuntini}%</div></div>
+    </div>
+    <p class="note tight">Gli spuntini prendono quello che resta per arrivare a 100%. Con un pasto a 0% l’app non te lo propone.</p>
+    <p class="note tight num">
+      Con {fmtInt(targets.kcal)} kcal al giorno: {MEALS.map((m) => `${m.label.toLowerCase()} ${fmtInt((targets.kcal * goals.mealPct[m.id]) / 100)}`).join(' · ')} kcal
+    </p>
   </div>
 </div>
 

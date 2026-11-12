@@ -1,5 +1,18 @@
 # Novità
 
+## [0.9.0] - 2026-11-12
+
+- Foto AI con la foto: se Gemini non risponde passa al modello successivo.
+- Attività: l'allenamento e il resto della giornata sono separati.
+- Profilo: scegli come dividere le calorie tra colazione, pranzo, cena e spuntini.
+- Foto AI: Gemini a volte restava bloccato sulla foto e dopo un minuto compariva "Non riesco a contattare Gemini". Ora dopo 30 secondi senza risposta l'app prova il modello successivo e chiede in un modo che non si blocca; per un giorno parte già così.
+- Allenamenti dall'orologio: niente più calorie sbagliate (16 kcal invece di 238). Se l'orologio non le manda a parte compare "–": toccando l'allenamento puoi scrivere il numero dell'app dell'orologio.
+- Con il numero dell'allenamento la scheda Attività mostra "Allenamento" + "Resto della giornata", che insieme fanno il totale. Il totale dell'orologio comprende già l'allenamento, quindi non si somma due volte.
+- Se l'orologio non ha ancora aggiornato il totale, le calorie bruciate sono almeno quelle dell'allenamento.
+- Profilo, nuova sezione "Calorie nei pasti": proposte rapide (Classica, Pranzo principale, Cena principale, Più spuntini, Senza colazione) o percentuali scritte da te. Gli spuntini prendono quello che resta per arrivare a 100%. Un pasto a 0% non viene proposto nei consigli.
+- Tolto dal Diario il tasto "Cosa sono le calorie?".
+- Il consiglio "trascina in giù" sotto le calorie dell'orologio ora si legge per intero.
+
 ## [0.8.0] - 2026-11-11
 
 - Una sola modalità: numeri e consigli sempre insieme, niente più interruttore.

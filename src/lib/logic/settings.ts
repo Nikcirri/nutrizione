@@ -1,5 +1,5 @@
-import type { Goals, Prefs, Profile, Settings, UpdateState } from '../types';
-import { ACTIVITY_LEVELS, GOAL_TYPES, RATES } from './goals';
+import type { Goals, MealPct, Prefs, Profile, Settings, UpdateState } from '../types';
+import { ACTIVITY_LEVELS, DEFAULT_MEAL_PCT, GOAL_TYPES, RATES } from './goals';
 
 export const DEFAULT_PROFILE: Profile = {
   sex: 'm',
@@ -18,6 +18,7 @@ export const DEFAULT_GOALS: Goals = {
   carbsPct: 50,
   proteinPct: 20,
   fatPct: 30,
+  mealPct: { ...DEFAULT_MEAL_PCT },
   autoWater: true,
   manualWaterMl: 2000,
 };
@@ -36,7 +37,7 @@ export function defaultSettings(): Settings {
   return {
     onboarded: false,
     profile: { ...DEFAULT_PROFILE },
-    goals: { ...DEFAULT_GOALS },
+    goals: { ...DEFAULT_GOALS, mealPct: { ...DEFAULT_MEAL_PCT } },
     prefs: { ...DEFAULT_PREFS },
     updates: { ...DEFAULT_UPDATES },
   };
@@ -88,12 +89,22 @@ export function sanitizeSettings(raw: unknown, now: Date = new Date()): Settings
     proteinPct = d.goals.proteinPct;
     fatPct = d.goals.fatPct;
   }
+  // Divisione tra i pasti: se manca (impostazioni prima della 0.9.0) o non fa 100, quella di sempre.
+  const mp = (typeof g.mealPct === 'object' && g.mealPct !== null ? g.mealPct : {}) as Record<string, unknown>;
+  let mealPct: MealPct = {
+    colazione: Math.round(numIn(mp.colazione, 0, 100, NaN)),
+    pranzo: Math.round(numIn(mp.pranzo, 0, 100, NaN)),
+    cena: Math.round(numIn(mp.cena, 0, 100, NaN)),
+    spuntini: Math.round(numIn(mp.spuntini, 0, 100, NaN)),
+  };
+  if (mealPct.colazione + mealPct.pranzo + mealPct.cena + mealPct.spuntini !== 100) mealPct = { ...d.goals.mealPct };
   const goals: Goals = {
     autoKcal: bool(g.autoKcal, d.goals.autoKcal),
     manualKcal: Math.round(numIn(g.manualKcal, 800, 6000, d.goals.manualKcal)),
     carbsPct,
     proteinPct,
     fatPct,
+    mealPct,
     autoWater: bool(g.autoWater, d.goals.autoWater),
     manualWaterMl: Math.round(numIn(g.manualWaterMl, 500, 6000, d.goals.manualWaterMl)),
   };

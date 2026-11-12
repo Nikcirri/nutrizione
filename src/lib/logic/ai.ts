@@ -313,7 +313,7 @@ export function pauseUntil(status: number, json: unknown, now: number): number |
 }
 
 /** Com'è andato un tentativo con un modello (per spiegare all'utente cosa non ha funzionato). */
-export type AttemptOutcome = 'ok' | 'empty' | 'unreadable' | 'quota' | 'model' | 'error';
+export type AttemptOutcome = 'ok' | 'empty' | 'unreadable' | 'quota' | 'model' | 'error' | 'timeout' | 'network';
 
 export interface AiAttempt {
   model: string;
@@ -337,6 +337,8 @@ const OUTCOME_TEXT: Record<AttemptOutcome, string> = {
   quota: 'limite gratuito raggiunto',
   model: 'non disponibile',
   error: 'errore',
+  timeout: 'nessuna risposta in tempo',
+  network: 'nessuna connessione',
 };
 
 /** Riga breve con i tentativi fatti, es. "3.8 Flash: limite gratuito raggiunto · 3.6 Flash: nessun cibo riconosciuto". */
@@ -384,7 +386,18 @@ export function geminiText(json: unknown): string {
     .join('');
 }
 
-export type GeminiProblem = 'key' | 'quota' | 'model' | 'blocked' | 'region' | 'other';
+export type GeminiProblem = 'key' | 'quota' | 'model' | 'blocked' | 'region' | 'timeout' | 'network' | 'other';
+
+/**
+ * Vero se la richiesta è caduta perché Gemini non ha risposto in tempo (e non perché manca la rete).
+ * Sul telefono l'errore arriva da Android ("timeout", "Read timed out"), nel browser è un AbortError.
+ */
+export function isTimeoutError(e: unknown): boolean {
+  const err = e as { name?: unknown; message?: unknown } | null;
+  if (err?.name === 'AbortError' || err?.name === 'TimeoutError') return true;
+  const message = typeof err?.message === 'string' ? err.message : typeof e === 'string' ? e : '';
+  return /time[ds]?[ -]?out/i.test(message);
+}
 
 /** Che tipo di errore ha restituito Gemini. */
 export function geminiProblem(status: number, json: unknown): GeminiProblem {
@@ -413,6 +426,10 @@ export function problemMessage(p: GeminiProblem): string {
       return 'Gemini non ha voluto analizzare questa foto. Prova con un’altra o con una descrizione.';
     case 'model':
       return 'Il modello di Gemini non è disponibile. Aggiorna l’app o riprova più tardi.';
+    case 'timeout':
+      return 'Gemini non ha risposto in tempo. Riprova tra poco: di solito la seconda volta va.';
+    case 'network':
+      return 'Non riesco a contattare Gemini. Controlla la connessione e riprova.';
     default:
       return 'Gemini non ha risposto. Riprova tra poco.';
   }

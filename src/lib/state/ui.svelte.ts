@@ -87,11 +87,13 @@ export interface ConfirmOptions {
   requireText?: string;
   /** Solo informazioni: un pulsante "Ho capito", senza "Annulla". */
   infoOnly?: boolean;
+  /** Casella per scrivere un numero (vedi `numberDialog`). */
+  numberInput?: { label: string; value: string; suffix: string };
 }
 
 interface DialogState extends ConfirmOptions {
   id: number;
-  resolve: (ok: boolean) => void;
+  resolve: (ok: boolean, text?: string) => void;
 }
 
 export const dialog = $state<{ current: DialogState | null }>({ current: null });
@@ -105,16 +107,27 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
   });
 }
 
+/**
+ * Finestra con una casella per scrivere un numero: restituisce quello che è stato scritto
+ * (anche vuoto) oppure null se l'utente annulla.
+ */
+export function numberDialog(opts: ConfirmOptions & { numberInput: NonNullable<ConfirmOptions['numberInput']> }): Promise<string | null> {
+  dialog.current?.resolve(false);
+  return new Promise((resolve) => {
+    dialog.current = { ...opts, id: nextDialogId++, resolve: (ok, text) => resolve(ok ? (text ?? '') : null) };
+  });
+}
+
 /** Finestra con una spiegazione. */
 export function infoDialog(title: string, message: string): Promise<boolean> {
   return confirmDialog({ title, message, confirmLabel: 'Ho capito', infoOnly: true });
 }
 
-export function resolveDialog(ok: boolean): void {
+export function resolveDialog(ok: boolean, text?: string): void {
   const d = dialog.current;
   if (!d) return;
   dialog.current = null;
-  d.resolve(ok);
+  d.resolve(ok, text);
 }
 
 // ---------- Attesa ----------

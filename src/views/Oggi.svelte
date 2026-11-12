@@ -3,10 +3,11 @@
   import { reportError } from '../lib/errors';
   import { connectHealthFlow, syncHealthDay } from '../lib/healthSync';
   import { addDays, dayChip, dayLabel, greeting, longDate, monthYear, timeLabel, weekDays } from '../lib/logic/dates';
-  import { dayBudget } from '../lib/logic/goals';
-  import { amountLabel, entryNutrients, fmtInt, fmtLiters, sumEntries } from '../lib/logic/nutrition';
+  import { dayBudget, mealShare } from '../lib/logic/goals';
+  import { amountLabel, entryNutrients, fmtInt, fmtLiters, parseNum, sumEntries } from '../lib/logic/nutrition';
   import { mealForHour } from '../lib/logic/dates';
   import { EXPLAIN, dayHints, dayVerdict, mealVerdict, nextMeal, nextMealAdvice, type Topic } from '../lib/logic/advice';
+  import { activitySplit, healthBurned, MAX_WORKOUT_KCAL, workoutKcalExplanation } from '../lib/logic/workoutKcal';
   import { isNative, tapFeedback } from '../lib/platform';
   import {
     activitiesFor,
@@ -16,20 +17,22 @@
     deleteActivity,
     entriesFor,
     getWater,
-    healthFor,
+    healthDayFor,
     previousDayWithMeal,
+    setWorkoutOverride,
   } from '../lib/repo';
   import { app, currentTargets, sheets, updateSettings } from '../lib/state/app.svelte';
   import { useLive } from '../lib/state/live.svelte';
-  import { infoDialog, showToast, showUndoToast } from '../lib/state/ui.svelte';
-  import { MEALS, type DiaryEntry, type MealId } from '../lib/types';
+  import { infoDialog, numberDialog, showToast, showUndoToast } from '../lib/state/ui.svelte';
+  import { MEALS, type DiaryEntry, type HealthWorkout, type MealId } from '../lib/types';
   import Icon, { type IconName } from '../lib/ui/Icon.svelte';
   import Ring from '../lib/ui/Ring.svelte';
 
   const entries = useLive(() => app.date, (d) => entriesFor(db, d), [] as DiaryEntry[]);
   const water = useLive(() => app.date, (d) => getWater(db, d), 0);
   const manual = useLive(() => app.date, (d) => activitiesFor(db, d), []);
-  const health = useLive(() => app.date, (d) => healthFor(db, d), undefined);
+  // Con le calorie degli allenamenti scritte a mano al posto di quelle mancanti.
+  const health = useLive(() => app.date, (d) => healthDayFor(db, d), undefined);
   // Giorni della settimana con qualcosa nel diario (puntino sotto il numero).
   const week = $derived(weekDays(app.date));
   const weekEntries = useLive(
@@ -44,7 +47,8 @@
   const targets = $derived(currentTargets());
   const eaten = $derived(sumEntries(entries.current));
   const manualKcal = $derived(manual.current.reduce((a, x) => a + x.kcal, 0));
-  const healthKcal = $derived(app.settings.prefs.healthConnected ? (health.current?.activeKcal ?? 0) : 0);
+  const healthKcal = $derived(app.settings.prefs.healthConnected ? healthBurned(health.current) : 0);
+  const split = $derived(activitySplit(health.current));
   const burned = $derived(manualKcal + healthKcal);
   const budget = $derived(dayBudget(targets.kcal, burned, app.settings.prefs.addActivityKcal));
   const remaining = $derived(budget - eaten.kcal);
@@ -80,14 +84,47 @@
   const filledMeals = $derived(new Set(entries.current.map((e) => e.meal)));
   const advice = $derived.by(() => {
     if (!isToday) return null;
-    const m = nextMeal(mealForHour(hour), filledMeals);
+    const goals = app.settings.goals;
+    const m = nextMeal(mealForHour(hour), filledMeals, new Set(MEALS.filter((x) => goals.mealPct[x.id] === 0).map((x) => x.id)));
     if (!m) return null;
-    const share = MEALS.find((x) => x.id === m)?.share ?? 0.3;
+    const share = mealShare(goals, m);
     const needProtein = hints.some((h) => h.includes('proteine'));
     const needVeg = hints.some((h) => h.includes('verdure'));
     return nextMealAdvice(m, remaining, budget * share, needProtein, needVeg);
   });
   const lightEmoji = (l: string) => (l === 'green' ? '🟢' : l === 'yellow' ? '🟡' : '🔴');
+
+  /** Accanto all'orario dell'allenamento: da dove viene il numero, se non arriva dall'orologio. */
+  function workoutFromLabel(w: HealthWorkout): string {
+    if (w.kcalFrom === 'manual') return 'scritte da te';
+    if (w.kcalFrom === 'total') return 'stima';
+    return '';
+  }
+
+  /**
+   * Toccando un allenamento: perché il numero c'è (o manca) e una casella per scrivere quello dell'app
+   * dell'orologio. Lasciandola vuota si torna al dato di Health Connect.
+   */
+  async function editWorkout(w: HealthWorkout) {
+    const date = app.date;
+    const text = await numberDialog({
+      title: 'Calorie dell’allenamento',
+      message: `${workoutKcalExplanation(w.kcalFrom)}\n\nPer vederle separate dal resto della giornata scrivi qui il numero che trovi nell’app dell’orologio. Lascia vuoto per usare quelle di Health Connect.`,
+      numberInput: { label: w.label, value: w.kcalFrom === 'manual' && w.kcal !== null ? String(w.kcal) : '', suffix: 'kcal' },
+      confirmLabel: 'Salva',
+    });
+    if (text === null) return;
+    const value = text.trim() ? parseNum(text) : null;
+    if (text.trim() && (value === null || value < 1 || value > MAX_WORKOUT_KCAL)) {
+      showToast(`Scrivi un numero di calorie tra 1 e ${fmtInt(MAX_WORKOUT_KCAL)}`);
+      return;
+    }
+    try {
+      await setWorkoutOverride(db, w.id, date, value === null ? null : Math.round(value), app.today);
+    } catch (e) {
+      reportError(e);
+    }
+  }
 
   function explain(topic: Topic) {
     void infoDialog(EXPLAIN[topic].title, EXPLAIN[topic].text);
@@ -250,7 +287,6 @@
       <span><i class="dot" style:background="var(--burn)"></i>Bruciate</span>
       <strong class="num">{fmtInt(burned)} <small>kcal</small></strong>
     </div>
-    <button class="what" onclick={() => explain('calorie')}><Icon name="info" size={14} /> Cosa sono le calorie?</button>
   </div>
 </section>
 
@@ -331,7 +367,7 @@
 {#each MEALS as meal (meal.id)}
   {@const list = entries.current.filter((e) => e.meal === meal.id)}
   {@const total = sumEntries(list)}
-  {@const mealTarget = budget * meal.share}
+  {@const mealTarget = budget * mealShare(app.settings.goals, meal.id)}
   {@const mv = mealVerdict(total.kcal, mealTarget)}
   <section class="card meal">
     <div class="meal-head">
@@ -378,26 +414,37 @@
   </div>
 
   {#if app.settings.prefs.healthConnected}
+    {@const workouts = health.current?.workouts ?? []}
+    <!-- Le calorie dell'orologio divise: ogni allenamento più il resto della giornata fanno il totale qui sopra. -->
     <div class="items">
+      {#each workouts as w (w.id)}
+        <button class="item" onclick={() => editWorkout(w)}>
+          <span class="grow">
+            <span class="title">{w.label}</span>
+            <span class="sub">{[timeLabel(w.start), `${w.minutes} min`, workoutFromLabel(w), w.source].filter(Boolean).join(' · ')}</span>
+          </span>
+          <span class="kcal num">{w.kcal !== null ? fmtInt(w.kcal) : '–'}<small> kcal</small></span>
+          <span class="why" aria-hidden="true"><Icon name={w.kcal === null ? 'edit' : 'info'} size={16} /></span>
+        </button>
+      {/each}
       <div class="item static">
         <span class="grow">
-          <span class="title">Dall’orologio</span>
+          <span class="title">{split.complete ? 'Resto della giornata' : 'Dall’orologio'}</span>
           <span class="sub">
             {fmtInt(health.current?.steps ?? 0)} passi{health.current ? ` · aggiornato alle ${timeLabel(health.current.syncedAt)}` : ''}
           </span>
-          <span class="sub">Si aggiorna da solo ogni minuto; trascina in giù per farlo subito</span>
-        </span>
-        <span class="kcal num">{fmtInt(health.current?.activeKcal ?? 0)}<small> kcal</small></span>
-      </div>
-      {#each health.current?.workouts ?? [] as w (w.id)}
-        <div class="item static">
-          <span class="grow">
-            <span class="title">{w.label}</span>
-            <span class="sub">{timeLabel(w.start)} · {w.minutes} min{w.source ? ` · ${w.source}` : ''}</span>
+          <span class="sub wrap">
+            {#if split.complete}
+              Passi e movimento fuori dagli allenamenti
+            {:else if workouts.length}
+              Comprende anche l’allenamento: toccalo per scrivere le sue calorie e vederle separate
+            {:else}
+              Si aggiorna da solo ogni minuto; trascina in giù per farlo subito
+            {/if}
           </span>
-          <span class="kcal num">{w.kcal !== null ? fmtInt(w.kcal) : '–'}<small> kcal</small></span>
-        </div>
-      {/each}
+        </span>
+        <span class="kcal num">{fmtInt(split.complete ? split.rest : split.total)}<small> kcal</small></span>
+      </div>
     </div>
   {:else if isNative()}
     <button class="connect" onclick={connect}>
@@ -627,20 +674,6 @@
     color: var(--text);
     cursor: pointer;
     font: inherit;
-  }
-  .what {
-    align-self: flex-start;
-    margin-top: 6px;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    opacity: 0.8;
-    font-size: 0.8125rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 0;
-    cursor: pointer;
   }
   .advice {
     margin-top: 12px;
@@ -875,9 +908,17 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .sub.wrap {
+    white-space: normal;
+  }
   .kcal {
     flex: none;
     font-weight: 600;
+  }
+  .why {
+    flex: none;
+    display: grid;
+    color: var(--text-muted);
   }
   .kcal small {
     margin-left: 3px;

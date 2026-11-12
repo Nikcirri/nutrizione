@@ -7,6 +7,7 @@ import {
   describeAttempts,
   geminiProblem,
   geminiText,
+  isTimeoutError,
   MEAL_SCHEMA,
   modelsToTry,
   parseAiMeal,
@@ -28,14 +29,27 @@ const BASE = 'https://generativelanguage.googleapis.com/v1beta';
  * gratuito resta in pausa fino a quando Google lo azzera, poi torna a essere il primo.
  */
 const MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
-const TIMEOUT_MS = 60_000;
+/** Tempo massimo per la richiesta "completa" (vedi `body`): se Gemini si blocca non si aspetta oltre. */
+const FULL_TIMEOUT_MS = 30_000;
+/** Tempo massimo per le altre richieste. */
+const TIMEOUT_MS = 45_000;
+/** Dopo un blocco della richiesta completa, per un giorno si usa subito quella leggera. */
+const LIGHT_KEY = 'aiLightUntil';
+const LIGHT_FOR_MS = 24 * 60 * 60 * 1000;
+
+/** La richiesta non è arrivata a Gemini (rete) o Gemini non ha risposto in tempo. */
+class NetProblem extends Error {
+  constructor(readonly kind: 'timeout' | 'network') {
+    super(kind);
+  }
+}
 
 interface HttpResult {
   status: number;
   data: unknown;
 }
 
-async function request(method: 'GET' | 'POST', url: string, key: string, body?: unknown): Promise<HttpResult> {
+async function request(method: 'GET' | 'POST', url: string, key: string, body?: unknown, timeoutMs = TIMEOUT_MS): Promise<HttpResult> {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     throw new UserError('Sei offline: collegati a internet e riprova.');
   }
@@ -49,13 +63,13 @@ async function request(method: 'GET' | 'POST', url: string, key: string, body?: 
         headers,
         data: body,
         connectTimeout: 15_000,
-        readTimeout: TIMEOUT_MS,
+        readTimeout: timeoutMs,
         responseType: 'json',
       });
       return { status: res.status, data: typeof res.data === 'string' ? safeJson(res.data) : res.data };
     }
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const res = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl.signal });
       return { status: res.status, data: safeJson(await res.text()) };
@@ -64,7 +78,7 @@ async function request(method: 'GET' | 'POST', url: string, key: string, body?: 
     }
   } catch (e) {
     if (e instanceof UserError) throw e;
-    throw new UserError('Non riesco a contattare Gemini. Controlla la connessione e riprova.');
+    throw new NetProblem(isTimeoutError(e) ? 'timeout' : 'network');
   }
 }
 
@@ -77,19 +91,31 @@ function safeJson(text: string): unknown {
 }
 
 /**
- * `full`: ragionamento breve (risposta più rapida) e forma della risposta imposta (JSON sempre valido).
- * Se un modello non accetta queste impostazioni si riprova senza (il prompt descrive comunque il JSON).
+ * Tre modi di chiedere, dal più preciso al più semplice (il prompt descrive comunque il JSON):
+ * - `full`: ragionamento breve e forma della risposta imposta (JSON sempre valido). A volte però Gemini
+ *   resta bloccato senza rispondere quando riceve tutte e due le cose insieme, soprattutto con una foto;
+ * - `light`: solo il ragionamento breve;
+ * - `bare`: niente impostazioni, per i modelli che non le accettano.
  */
-function body(prompt: string, image: { base64: string; mime: string } | null, full: boolean): unknown {
+type Mode = 'full' | 'light' | 'bare';
+
+function body(prompt: string, image: { base64: string; mime: string } | null, mode: Mode): unknown {
   const parts: unknown[] = [];
   if (image) parts.push({ inline_data: { mime_type: image.mime, data: image.base64 } });
   parts.push({ text: prompt });
   const generationConfig: Record<string, unknown> = { responseMimeType: 'application/json' };
-  if (full) {
-    generationConfig.thinkingConfig = { thinkingLevel: 'low' };
-    generationConfig.responseJsonSchema = MEAL_SCHEMA;
-  }
+  if (mode !== 'bare') generationConfig.thinkingConfig = { thinkingLevel: 'low' };
+  if (mode === 'full') generationConfig.responseJsonSchema = MEAL_SCHEMA;
   return { contents: [{ role: 'user', parts }], generationConfig };
+}
+
+async function lightPreferred(): Promise<boolean> {
+  const row = await db.kv.get(LIGHT_KEY).catch(() => undefined);
+  return typeof row?.value === 'number' && row.value > Date.now();
+}
+
+function preferLight(): void {
+  void db.kv.put({ key: LIGHT_KEY, value: Date.now() + LIGHT_FOR_MS }).catch(() => undefined);
 }
 
 /** Errore della Foto AI con, in più, una riga tecnica breve su cosa è successo con ogni modello. */
@@ -127,13 +153,30 @@ export async function analyzeMeal(
   const attempts: AiAttempt[] = [];
   let empty: { meal: AiMeal; model: string } | null = null;
   let lastProblem: GeminiProblem = 'other';
+  let mode: Mode = (await lightPreferred()) ? 'light' : 'full';
   const savePauses = () => void setModelPauses(db, pauses).catch(() => undefined);
 
   for (const model of models) {
     const url = `${BASE}/models/${model}:generateContent`;
-    let res = await request('POST', url, key, body(prompt, image, true));
-    if (res.status === 400 && geminiProblem(res.status, res.data) === 'other') {
-      res = await request('POST', url, key, body(prompt, image, false));
+    let res: HttpResult;
+    try {
+      res = await request('POST', url, key, body(prompt, image, mode), mode === 'full' ? FULL_TIMEOUT_MS : TIMEOUT_MS);
+      if (res.status === 400 && geminiProblem(res.status, res.data) === 'other') {
+        res = await request('POST', url, key, body(prompt, image, 'bare'));
+      }
+    } catch (e) {
+      if (!(e instanceof NetProblem)) throw e;
+      attempts.push({ model, outcome: e.kind });
+      lastProblem = e.kind;
+      // Senza rete è inutile provare gli altri modelli.
+      if (e.kind === 'network') break;
+      // Nessuna risposta: si passa al modello successivo e da qui in poi si chiede in modo leggero,
+      // che non si blocca (e per un giorno si parte già così).
+      if (mode === 'full') {
+        mode = 'light';
+        preferLight();
+      }
+      continue;
     }
 
     if (res.status < 200 || res.status >= 300) {
@@ -189,10 +232,16 @@ export type KeyCheck = 'ok' | 'invalid' | 'error';
  */
 export async function checkKey(key: string): Promise<KeyCheck> {
   const model = MODELS[MODELS.length - 1];
-  const res = await request('POST', `${BASE}/models/${model}:generateContent`, key, {
-    contents: [{ role: 'user', parts: [{ text: 'Rispondi solo: ok' }] }],
-    generationConfig: { maxOutputTokens: 5 },
-  });
+  let res: HttpResult;
+  try {
+    res = await request('POST', `${BASE}/models/${model}:generateContent`, key, {
+      contents: [{ role: 'user', parts: [{ text: 'Rispondi solo: ok' }] }],
+      generationConfig: { maxOutputTokens: 5 },
+    });
+  } catch (e) {
+    if (e instanceof NetProblem) throw new UserError(problemMessage(e.kind));
+    throw e;
+  }
   if (res.status >= 200 && res.status < 300) return 'ok';
   const problem = geminiProblem(res.status, res.data);
   if (problem === 'key') return 'invalid';

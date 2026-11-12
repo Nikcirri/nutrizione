@@ -17,6 +17,7 @@
   } from '../../lib/logic/ai';
   import { fmtG, fmtInt, parseNum } from '../../lib/logic/nutrition';
   import { mealVerdict } from '../../lib/logic/advice';
+  import { mealShare } from '../../lib/logic/goals';
   import { tapFeedback } from '../../lib/platform';
   import { addEntry, addHabit, findDish, getAiKey, getHabits, saveDish, topDishes } from '../../lib/repo';
   import { AiError, analyzeMeal } from '../../lib/services/gemini';
@@ -85,8 +86,8 @@
     ),
   );
   const mealLabel = $derived(MEALS.find((m) => m.id === meal)?.label ?? '');
-  const mealShare = $derived(MEALS.find((m) => m.id === meal)?.share ?? 0.3);
-  const verdict = $derived(mealVerdict(total.kcal, currentTargets().kcal * mealShare));
+  const share = $derived(mealShare(app.settings.goals, meal));
+  const verdict = $derived(mealVerdict(total.kcal, currentTargets().kcal * share));
   /** Vero quando l'utente ha cambiato le quantità: la frase e la porzione dell'AI non valgono più. */
   const edited = $derived.by(() => {
     if (!result) return false;

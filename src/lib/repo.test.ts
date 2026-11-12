@@ -23,6 +23,11 @@ import {
   topDishes,
   addHabit,
   getHabits,
+  getWorkoutOverrides,
+  healthDayFor,
+  healthFor,
+  saveHealth,
+  setWorkoutOverride,
 } from './repo';
 import type { DiaryEntry } from './types';
 
@@ -91,6 +96,7 @@ describe('database', () => {
     await saveSettings(db, s);
     await addEntry(db, entry('2026-11-09', 'pranzo'), mela);
     await changeWater(db, '2026-11-09', 500);
+    await setWorkoutOverride(db, 'hc-1', '2026-11-09', 238, '2026-11-10');
     const data = await exportAll(db);
     const other = new NutriDB(`test-${n++}`);
     await addEntry(other, entry('2026-01-01', 'cena'), mela);
@@ -98,6 +104,21 @@ describe('database', () => {
     expect(await entriesFor(other, '2026-01-01')).toHaveLength(0);
     expect(await entriesFor(other, '2026-11-09')).toHaveLength(1);
     expect((await loadSettings(other)).profile.heightCm).toBe(180);
+    expect(await getWorkoutOverrides(other)).toEqual({ 'hc-1': { kcal: 238, date: '2026-11-09' } });
+  });
+});
+
+describe('calorie degli allenamenti scritte a mano', () => {
+  it('si vedono nei dati del giorno e si possono togliere', async () => {
+    const gym = { id: 'hc-1', type: 'other', label: 'Allenamento', start: '2026-11-11T18:12:00Z', minutes: 36, kcal: null, kcalFrom: 'day' as const };
+    await saveHealth(db, { date: '2026-11-11', activeKcal: 578, steps: 5027, workouts: [gym], syncedAt: '2026-11-11T20:34:00Z' });
+    await setWorkoutOverride(db, 'hc-1', '2026-11-11', 238, '2026-11-12');
+    expect((await healthDayFor(db, '2026-11-11'))?.workouts[0]).toMatchObject({ kcal: 238, kcalFrom: 'manual' });
+    // I dati letti da Health Connect restano quelli originali.
+    expect((await healthFor(db, '2026-11-11'))?.workouts[0]?.kcal).toBeNull();
+    await setWorkoutOverride(db, 'hc-1', '2026-11-11', null, '2026-11-12');
+    expect((await healthDayFor(db, '2026-11-11'))?.workouts[0]).toMatchObject({ kcal: null, kcalFrom: 'day' });
+    expect(await healthDayFor(db, '2026-01-01')).toBeUndefined();
   });
 });
 

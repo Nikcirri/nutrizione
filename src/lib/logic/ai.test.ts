@@ -17,6 +17,7 @@ import {
   msToPacificMidnight,
   pauseUntil,
   describeAttempts,
+  isTimeoutError,
   parseAiMeal,
   scaleItem,
   waitingMessage,
@@ -184,5 +185,23 @@ describe('AI: porzione, perché e domande', () => {
     const prompt = buildPrompt('', true, { habits: hints, knownDishes: ['Colazione solita'] });
     expect(prompt).toContain('condisce poco');
     expect(prompt).toContain('Colazione solita');
+  });
+});
+
+describe('AI: nessuna risposta in tempo', () => {
+  it('riconosce quando Gemini non ha risposto in tempo', () => {
+    expect(isTimeoutError(new Error('timeout'))).toBe(true);
+    expect(isTimeoutError(new Error('Read timed out'))).toBe(true);
+    expect(isTimeoutError(new Error('failed to connect to generativelanguage.googleapis.com after 15000ms: Timed out'))).toBe(true);
+    expect(isTimeoutError(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' }))).toBe(true);
+    // Senza rete non è un "tempo scaduto".
+    expect(isTimeoutError(new Error('Unable to resolve host "generativelanguage.googleapis.com"'))).toBe(false);
+    expect(isTimeoutError(null)).toBe(false);
+  });
+
+  it('lo scrive nella riga dei tentativi', () => {
+    expect(describeAttempts([{ model: 'gemini-3.8-flash', outcome: 'timeout' }, { model: 'gemini-3.6-flash', outcome: 'ok' }])).toBe(
+      '3.8 Flash: nessuna risposta in tempo · 3.6 Flash: ok',
+    );
   });
 });

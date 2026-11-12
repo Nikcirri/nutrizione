@@ -4,7 +4,22 @@ import { activityKcal } from './activities';
 import { BackupError, makeBackup, parseBackup, type BackupData } from './backup';
 import { addDays, dayChip, dayLabel, isDateKey, lastDays, mealForHour, weekDays } from './dates';
 import { fastStats, fastStatus, formatClock, formatHours } from './fasting';
-import { balanceMacros, bmi, bmr, dailyTargets, dayBudget, energyPlan, rateLabel, waterGoalMl, weeksToTarget } from './goals';
+import {
+  balanceMacros,
+  balanceMeals,
+  bmi,
+  bmr,
+  dailyTargets,
+  dayBudget,
+  DEFAULT_MEAL_PCT,
+  energyPlan,
+  MEAL_PRESETS,
+  mealShare,
+  rateLabel,
+  sameMealPct,
+  waterGoalMl,
+  weeksToTarget,
+} from './goals';
 import { amountLabel, fmtG, kcalFromMacros, macroSplit, parseNum, scale, sumEntries } from './nutrition';
 import { detectUnit, isBarcode, parseNutriments, parseProductResponse, parseSearchResponse } from './off';
 import { matchScore, normalize, searchFoods } from './search';
@@ -326,6 +341,7 @@ describe('backup', () => {
     health: [],
     fasts: [],
     dishes: [],
+    workoutKcal: { 'hc-1': { kcal: 238, date: '2026-11-11' } },
     cigarettes: { '2026-11-09': 7, '2026-11-10': 5, rotta: 3 },
   };
   it('andata e ritorno, scartando le voci rotte', () => {
@@ -333,11 +349,14 @@ describe('backup', () => {
     expect(back.entries).toHaveLength(1);
     expect(back.water[0]?.ml).toBe(500);
     expect(back.cigarettes).toEqual({ '2026-11-09': 7, '2026-11-10': 5 });
+    expect(back.workoutKcal).toEqual({ 'hc-1': { kcal: 238, date: '2026-11-11' } });
   });
   it('un backup vecchio senza sigarette non tocca il contatore', () => {
     const old = JSON.parse(makeBackup(data, '0.5.0')) as { data: Record<string, unknown> };
     delete old.data.cigarettes;
+    delete old.data.workoutKcal;
     expect(parseBackup(JSON.stringify(old)).cigarettes).toBeNull();
+    expect(parseBackup(JSON.stringify(old)).workoutKcal).toEqual({});
   });
   it('rifiuta file non validi o troppo nuovi', () => {
     expect(() => parseBackup('ciao')).toThrow(BackupError);
@@ -363,5 +382,33 @@ describe('aggiornamenti', () => {
     expect(shouldAutoCheck('2026-11-09T11:55:00Z', now)).toBe(false);
     expect(shouldAutoCheck('2026-11-09T11:45:00Z', now)).toBe(true);
     expect(shouldAutoCheck('rotto', now)).toBe(true);
+  });
+});
+
+describe('calorie nei pasti', () => {
+  it('gli spuntini prendono quello che resta; lo 0 è ammesso', () => {
+    expect(balanceMeals(25, 35, 30)).toEqual({ colazione: 25, pranzo: 35, cena: 30, spuntini: 10 });
+    expect(balanceMeals(0, 45, 40)).toEqual({ colazione: 0, pranzo: 45, cena: 40, spuntini: 15 });
+    // Se si supera 100 si accorcia l'ultimo pasto scritto.
+    expect(balanceMeals(40, 35, 30)).toEqual({ colazione: 40, pranzo: 35, cena: 25, spuntini: 0 });
+    expect(balanceMeals(120, -5, Number.NaN)).toEqual({ colazione: 100, pranzo: 0, cena: 0, spuntini: 0 });
+    expect(balanceMeals(24.6, 35.2, 30)).toEqual({ colazione: 25, pranzo: 35, cena: 30, spuntini: 10 });
+  });
+
+  it('quota del pasto e proposte', () => {
+    const goals = { mealPct: { colazione: 20, pranzo: 40, cena: 30, spuntini: 10 } };
+    expect(mealShare(goals, 'pranzo')).toBe(0.4);
+    for (const p of MEAL_PRESETS) expect(p.pct.colazione + p.pct.pranzo + p.pct.cena + p.pct.spuntini).toBe(100);
+    expect(sameMealPct(MEAL_PRESETS[0]!.pct, DEFAULT_MEAL_PCT)).toBe(true);
+  });
+
+  it('impostazioni vecchie o rovinate tornano alla divisione di sempre', () => {
+    expect(sanitizeSettings({ goals: {} }).goals.mealPct).toEqual(DEFAULT_MEAL_PCT);
+    expect(sanitizeSettings({ goals: { mealPct: { colazione: 50, pranzo: 50, cena: 50, spuntini: 0 } } }).goals.mealPct).toEqual(DEFAULT_MEAL_PCT);
+    expect(sanitizeSettings({ goals: { mealPct: { colazione: 0, pranzo: 45, cena: 40, spuntini: 15 } } }).goals.mealPct).toEqual({ colazione: 0, pranzo: 45, cena: 40, spuntini: 15 });
+    // La divisione di base non si rovina modificando quella salvata.
+    const a = defaultSettings();
+    a.goals.mealPct.colazione = 0;
+    expect(defaultSettings().goals.mealPct.colazione).toBe(25);
   });
 });

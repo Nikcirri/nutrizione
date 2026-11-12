@@ -2,6 +2,7 @@ import type { Activity, DiaryEntry, Dish, Fast, Food, HealthDay, Settings, Water
 import { sanitizeCigDays, type CigDays } from './cigarettes';
 import { dateKey, isDateKey } from './dates';
 import { sanitizeSettings } from './settings';
+import { sanitizeOverrides, type WorkoutKcalOverrides } from './workoutKcal';
 
 export const BACKUP_FORMAT = 1;
 
@@ -15,6 +16,8 @@ export interface BackupData {
   health: HealthDay[];
   fasts: Fast[];
   dishes: Dish[];
+  /** Calorie degli allenamenti scritte a mano (vuoto nei backup prima della 0.9.0). */
+  workoutKcal: WorkoutKcalOverrides;
   /**
    * Contatore di sigarette (vive sul telefono, fuori dal database).
    * null nei backup delle versioni prima della 0.6.1: ripristinandoli il contatore non si tocca.
@@ -79,6 +82,7 @@ export function parseBackup(text: string): BackupData {
     fasts: list<Fast>(d.fasts, (f) => isStr(f.start) && (f.end === null || isStr(f.end)) && isNum(f.targetHours)),
     // I backup delle versioni prima della 0.5.0 non hanno i piatti salvati.
     dishes: list<Dish>(d.dishes, (x) => isStr(x.id) && isStr(x.name) && Array.isArray(x.items) && isNum(x.kcal)),
+    workoutKcal: sanitizeOverrides(d.workoutKcal),
     cigarettes: isObj(d.cigarettes) ? sanitizeCigDays(d.cigarettes) : null,
   };
 }

@@ -2,10 +2,11 @@
 import { db } from './db';
 import { UserError } from './errors';
 import { inForeground, repeatInForeground } from './foreground';
+import { energyPlan } from './logic/goals';
 import { isNative } from './platform';
 import { healthFor, saveHealth } from './repo';
 import { connectHealth, healthAuthorized, healthAvailability, readHealthDay } from './services/health';
-import { app, updateSettings } from './state/app.svelte';
+import { app, updateSettings, weightForCalc } from './state/app.svelte';
 
 /** Due letture dello stesso giorno a meno di 30 secondi l'una dall'altra non servono. */
 const MIN_INTERVAL_MS = 30_000;
@@ -23,7 +24,7 @@ export function syncHealthDay(date: string, force = false): Promise<void> {
       const saved = await healthFor(db, date);
       if (saved && Date.now() - new Date(saved.syncedAt).getTime() < MIN_INTERVAL_MS) return;
     }
-    const day = await readHealthDay(date);
+    const day = await readHealthDay(date, energyPlan(app.settings.profile, weightForCalc()).bmr);
     await saveHealth(db, day);
   })().finally(() => running.delete(date));
   running.set(date, job);

@@ -7,9 +7,13 @@
 
   $effect(() => {
     if (!current) return;
-    typed = '';
+    typed = current.numberInput?.value ?? '';
     return registerOverlay(() => resolveDialog(false));
   });
+
+  function confirm() {
+    resolveDialog(true, current?.numberInput ? typed : undefined);
+  }
 </script>
 
 {#if current}
@@ -17,6 +21,23 @@
   <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-title">
     <h2 id="dlg-title">{current.title}</h2>
     {#if current.message}<p>{current.message}</p>{/if}
+    {#if current.numberInput}
+      <label class="field">
+        <span>{current.numberInput.label}</span>
+        <span class="with-suffix">
+          <input
+            class="input num"
+            bind:value={typed}
+            inputmode="decimal"
+            autocomplete="off"
+            onkeydown={(e) => {
+              if (e.key === 'Enter') confirm();
+            }}
+          />
+          <span class="suffix">{current.numberInput.suffix}</span>
+        </span>
+      </label>
+    {/if}
     {#if current.requireText}
       <label class="field">
         <span>Per confermare scrivi <strong>{current.requireText}</strong></span>
@@ -32,7 +53,7 @@
         class:btn-primary={!current.danger}
         class:btn-danger={current.danger}
         disabled={!canConfirm}
-        onclick={() => resolveDialog(true)}
+        onclick={confirm}
       >
         {current.confirmLabel ?? 'Conferma'}
       </button>
@@ -63,6 +84,22 @@
     flex-direction: column;
     gap: 12px;
     box-shadow: 0 12px 40px rgb(0 0 0 / 0.25);
+    /* Testi lunghi e tastiera aperta: la finestra scorre invece di uscire dallo schermo. */
+    max-height: calc(100dvh - 40px);
+    overflow-y: auto;
+  }
+  .with-suffix {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .with-suffix .input {
+    flex: 1;
+    min-width: 0;
+  }
+  .suffix {
+    flex: none;
+    color: var(--text-muted);
   }
   h2 {
     margin: 0;

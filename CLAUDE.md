@@ -5,6 +5,8 @@
   Rete solo per Open Food Facts (ricerca e codici a barre, via `CapacitorHttp` con User-Agent dell'app), per Google Gemini ("Foto AI", chiave personale dell'utente) e per il controllo aggiornamenti su GitHub.
 - Foto AI: `src/lib/services/gemini.ts` e `src/lib/logic/ai.ts` (prompt, schema della risposta `MEAL_SCHEMA` per `responseJsonSchema`, lettura, con test).
   Si usa sempre il modello migliore disponibile: chi finisce il limite gratuito (circa 20 richieste al giorno sui Flash) va in pausa in `kv` `aiModelPauses` fino alla mezzanotte di Los Angeles, chi non esiste per 7 giorni. Se un modello non riconosce il cibo si prova il successivo; sotto l'errore si mostra la riga dei tentativi.
+  Gemini a volte resta bloccato senza rispondere quando riceve insieme schema della risposta e ragionamento (succedeva con le foto: errore "Non riesco a contattare Gemini" dopo un minuto).
+  Per questo la richiesta completa (`full`) ha al massimo 30 s: se non risponde si passa al modello successivo in modo `light` (solo ragionamento breve) e per 24 ore si parte già così (`kv` `aiLightUntil`). Un errore di rete o di tempo non deve mai fermare i tentativi senza provare il modello successivo (solo senza rete ci si ferma).
   Dopo la foto la stima NON parte da sola (l'utente vuole il tempo di scrivere la descrizione); la descrizione ha la precedenza sulla foto. La chiave sta in `kv` con nome `geminiKey`, fuori dalle impostazioni: non deve mai finire nei backup.
   L'AI risponde anche con porzione, frase "perché", e fino a 2 domande con risposte pronte. Le correzioni con i pulsanti si salvano come abitudini (`kv` `aiHabits`) e finiscono nel prompt; i piatti aggiunti vanno nella tabella `dishes` (schema `version(2)`), mostrati come "I tuoi piatti". Sopra 1500 kcal l'app chiede conferma.
 - Una sola modalità (dalla 0.8.0 la "modalità semplice" non esiste più: l'utente non vuole interruttori tra due viste). Numeri e parole stanno sempre insieme, così i numeri si imparano a leggere:
@@ -12,6 +14,9 @@
   Nella scheda dell'alimento sempre tutti i valori, le tre porzioni Piccola/Normale/Abbondante con i loro grammi, il menu "Misura esatta" e il riquadro del numero.
   Si parte sempre in grammi (chi scrive "95" intende 95 g, non 95 porzioni). La porzione normale è la prima misura dell'alimento; se non ne ha, è stimata dalle calorie (`normalPortion`) e la scheda lo dice.
   Logica in `src/lib/logic/advice.ts` (con test), idee in `src/lib/data/mealIdeas.ts`. Non rimettere `prefs.simpleMode`.
+  Il tasto "Cosa sono le calorie?" è stato tolto (l'utente lo trovava superficiale): non rimetterlo. Le spiegazioni al tocco restano sui riquadri dei macronutrienti.
+- Divisione delle calorie tra i pasti: `Goals.mealPct` (percentuali, somma 100), scelta nel Profilo come per i macronutrienti (proposte rapide, colazione/pranzo/cena da scrivere, gli spuntini prendono il resto: `balanceMeals`).
+  Usa sempre `mealShare(goals, pasto)` di `logic/goals.ts`: `MEALS` non ha più la quota. Un pasto a 0% non viene proposto nei consigli (`nextMeal` con `skip`).
 - Il + (centrale e dei pasti) apre sempre il menu Aggiungi: l'utente non vuole che apra subito la fotocamera.
 - Logica in funzioni pure dentro `src/lib/logic`, con test Vitest. Il database passa da `src/lib/repo.ts` (test con fake-indexeddb in `src/lib/repo.test.ts`).
 - Grafica: tema verde lime (variabili in `src/app.css`), schede bianche molto arrotondate, carattere Outfit incluso. Il colore dei grafici è `--chart` (verificato per il contrasto).
@@ -30,6 +35,12 @@
 - La chiave di firma non va mai nel repository: vive nei Secrets di GitHub (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`); il workflow legge da solo il nome (alias) della chiave. Non cambiarla mai.
 - Non cambiare `appId` (`com.nikcirri.nutrizione`) né il nome del database IndexedDB (`nutrizione`). Se cambi lo schema, aggiungi una nuova `version()` in `src/lib/db.ts` senza togliere le vecchie.
 - Dati di Health Connect sempre freschi (`src/lib/healthSync.ts`): rilettura ogni minuto ad app aperta sul Diario, al ritorno nell'app e con "trascina in giù" (Diario e Progressi, in `App.svelte`).
+- Calorie degli allenamenti (`src/lib/logic/workoutKcal.ts`, con test): NON usare `totalEnergyBurned` del plugin, che è la fetta proporzionale della somma di Health Connect.
+  Mi Fitness (orologio Xiaomi dell'utente) manda le calorie attive in blocchi lunghi ore, allenamento compreso: la fetta dava 16 kcal a un allenamento da 238.
+  Si leggono i singoli dati (`readSamples`) e si usano solo quelli "a misura" dell'allenamento: prima le calorie attive, poi le totali meno il metabolismo a riposo (`stima`), altrimenti "–".
+  Toccando l'allenamento nel Diario si legge da dove viene il numero e si può scrivere quello dell'app dell'orologio: `kv` `workoutKcal` (per id dell'allenamento, nel backup), applicato da `healthDayFor` in `repo.ts`. Leggi sempre i dati del giorno con `healthDayFor`, non con `healthFor`.
+  Il totale dell'orologio comprende già gli allenamenti: le calorie bruciate sono `healthBurned` = massimo tra il totale e la somma degli allenamenti, MAI la somma dei due (Diario e widget).
+  Nella scheda Attività: un rigo per allenamento e "Resto della giornata" (totale − allenamenti) quando tutti hanno un numero, altrimenti "Dall'orologio" con il totale.
 - Health Connect: l'app chiede solo letture (passi, calorie attive e totali, distanza, allenamenti). I permessi in più dichiarati dal plugin si tolgono in `android/app/src/main/AndroidManifest.xml` con `tools:node="remove"`.
   `src/android.test.ts` confronta il manifest con quello del plugin e `scripts/check-apk.sh` controlla l'APK finito in GitHub Actions: se compare un permesso non previsto la build si ferma.
 - Aggiornamenti: controllo all'apertura e al ritorno nell'app (al massimo ogni 10 minuti, `src/lib/state/update.svelte.ts`); "Aggiorna" scarica l'APK con il plugin dell'app `AppUpdaterPlugin.java` (accetta solo URL delle Release di questo repo) e apre l'installazione di Android (permesso `REQUEST_INSTALL_PACKAGES`). Le prime 3 righe del changelog compaiono nell'avviso: scrivile brevi.
