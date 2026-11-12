@@ -1,5 +1,13 @@
 # Novità
 
+## [0.9.5] - 2026-11-12
+
+- Foto AI: meno richieste, così il limite gratuito di Gemini dura di più.
+- Il modello migliore ha più tempo per rispondere: stime di qualità migliore.
+- Se Google dà un errore momentaneo, l'app riprova da sola.
+- Prima una foto poteva far partire tutti e tre i modelli insieme e consumare il limite tre volte più in fretta. Ora al massimo due: il secondo parte solo se il migliore tarda più di 14 secondi, e il migliore ha ancora 10 secondi di vantaggio.
+- Un modello viene considerato "lento" solo se resta davvero senza risposta, non quando un altro risponde prima.
+
 ## [0.9.4] - 2026-11-12
 
 - Foto AI più costante: la stessa foto dà la stessa stima.

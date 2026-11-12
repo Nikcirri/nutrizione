@@ -21,6 +21,7 @@ import {
   GRACE_MS,
   OVERALL_MS,
   raceStep,
+  wasSlow,
   estimateKey,
   findCached,
   fingerprint,
@@ -294,5 +295,16 @@ describe('AI: abitudini dalle correzioni', () => {
     expect(habitsHints({ lessDressing: 0, moreDressing: 0, smaller: 2, bigger: 0 })).toEqual([]);
     expect(habitsHints({ lessDressing: 0, moreDressing: 0, smaller: 3, bigger: 0 })).toEqual(['Di solito mangia porzioni più piccole della media.']);
     expect(habitsLabels({ lessDressing: 4, moreDressing: 1, smaller: 3, bigger: 1 })).toEqual(['condisci poco']);
+  });
+});
+
+describe('AI: modelli lenti con le foto', () => {
+  it('lento solo chi è rimasto senza risposta a lungo, non chi è stato superato', () => {
+    expect(wasSlow('timeout', 3000)).toBe(true);
+    expect(wasSlow(null, 25_000)).toBe(true);
+    // Superato da un modello più veloce dopo pochi secondi: non è lento.
+    expect(wasSlow(null, 6_000)).toBe(false);
+    expect(wasSlow('ok', 30_000)).toBe(false);
+    expect(wasSlow('quota', 1_000)).toBe(false);
   });
 });

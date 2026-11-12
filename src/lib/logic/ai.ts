@@ -431,10 +431,26 @@ const OUTCOME_TEXT: Record<AttemptOutcome, string> = {
 // uno dopo l'altro voleva dire minuti. Ora si parte dal migliore e, se tarda, si avvia anche il successivo:
 // vince la prima risposta buona, ma un modello migliore ancora in corsa ha qualche secondo di vantaggio.
 
-/** Dopo quanto, senza risposta, si avvia anche il modello successivo. */
-export const STAGGER_MS = 8_000;
-/** Con una risposta buona di un modello più leggero, quanto si aspetta ancora quelli migliori. */
-export const GRACE_MS = 6_000;
+/**
+ * Dopo quanto, senza risposta, si avvia anche il modello successivo. Il limite gratuito è per modello e
+ * ogni richiesta avviata conta anche se poi non serve: si avvia un modello in più solo quando il migliore
+ * tarda davvero (con le foto il 3.6 Flash risponde di solito in 4–11 s).
+ */
+export const STAGGER_MS = 14_000;
+/** Con una risposta buona di un modello più leggero, quanto si aspetta ancora quelli migliori (stimano meglio). */
+export const GRACE_MS = 10_000;
+/**
+ * Un modello è "lento con le foto" solo se è rimasto senza rispondere almeno questo tempo. Prima bastava
+ * essere superati da un altro: in pochi giri tutti i modelli diventavano "lenti" e partivano insieme a ogni
+ * foto, consumando il limite gratuito tre volte più in fretta.
+ */
+export const SLOW_AFTER_MS = 20_000;
+
+/** Vero se un modello va segnato lento: non ha risposto (o è andato oltre il tempo) dopo almeno `SLOW_AFTER_MS`. */
+export function wasSlow(outcome: AttemptOutcome | null, waitedMs: number): boolean {
+  if (outcome === 'timeout') return true;
+  return outcome === null && waitedMs >= SLOW_AFTER_MS;
+}
 /** Tempo massimo per tutta l'analisi. */
 export const OVERALL_MS = 75_000;
 /** Se nessuno ha risposto in tempo e restano almeno questi millisecondi, si riprova una volta il più veloce. */

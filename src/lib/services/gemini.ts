@@ -21,6 +21,7 @@ import {
   sanitizeCache,
   withCached,
   SLOW_FOR_MS,
+  wasSlow,
   thinkingLevelFor,
   type AiAttempt,
   type AiMeal,
@@ -261,6 +262,11 @@ async function estimateMeal(
       if (res.status === 400 && geminiProblem(res.status, res.data) === 'other') {
         res = await request('POST', url, key, body(prompt, image, 'bare', model), limit(), signal);
       }
+      // Errore momentaneo dei server di Google (500, 503 "sovraccarico"): si riprova una volta lo stesso modello.
+      if (res.status >= 500 && deadline - Date.now() > 10_000 && !signal.aborted) {
+        await new Promise((r) => setTimeout(r, 1500));
+        res = await request('POST', url, key, body(prompt, image, mode, model), limit(), signal);
+      }
     } catch (e) {
       if (!(e instanceof NetProblem)) throw e;
       // Il formato completo a volte fa bloccare Gemini: per un giorno si chiede in modo leggero.
@@ -355,10 +361,10 @@ async function estimateMeal(
   if (image) {
     let changed = false;
     for (const r of runs) {
-      if (!r.result || r.result.outcome === 'timeout') {
+      if (wasSlow(r.result?.outcome ?? null, (r.result ? r.doneAt : Date.now()) - r.startedAt)) {
         slow[r.model] = Date.now() + SLOW_FOR_MS;
         changed = true;
-      } else if (r.result.kind === 'ok' && r.model in slow) {
+      } else if (r.result?.kind === 'ok' && r.model in slow) {
         delete slow[r.model];
         changed = true;
       }
