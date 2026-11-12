@@ -1,5 +1,13 @@
 # Novità
 
+## [0.9.3] - 2026-11-12
+
+- Foto AI più rapida: ai modelli leggeri si chiede il ragionamento minimo.
+- Se nessuno risponde in tempo, l'app riprova da sola invece di dare errore.
+- Sotto la stima vedi quale modello ha risposto e in quanti secondi.
+- Il 3.5 Flash-Lite e il 3.6 Flash ora lavorano con il ragionamento minimo, il più veloce (per il Flash-Lite è quello normale). Il 3.8 Flash non lo accetta e resta com'era.
+- Se nessun modello risponde in tempo e resta almeno un terzo del tempo, l'app riprova una volta il modello più veloce.
+
 ## [0.9.2] - 2026-11-12
 
 - Foto AI molto più veloce: i modelli non si aspettano più uno dopo l'altro.

@@ -52,6 +52,8 @@
   let result = $state<AiMeal | null>(null);
   /** Il modello di Gemini che ha fatto la stima. */
   let usedModel = $state('');
+  /** Riga dei tentativi anche quando la stima riesce: chi ha risposto e in quanti secondi. */
+  let usedDetail = $state('');
   let rows = $state<Row[]>([]);
   let answers = $state<Record<number, number>>({});
   let details = $state(true);
@@ -161,6 +163,7 @@
       }
       result = r;
       usedModel = model;
+      usedDetail = detail;
       rows = r.items.map((i) => ({ base: i, grams: String(i.grams), include: true }));
       answers = Object.fromEntries(r.questions.map((_, i) => [i, 0]));
       known = r.items.length ? ((await findDish(db, r.dish)) ?? null) : null;
@@ -457,6 +460,7 @@
       </div>
       {#if result.note}<p class="note">{result.note}</p>{/if}
       {#if usedModel}<p class="note small">Stima di Gemini {modelLabel(usedModel)}</p>{/if}
+      {#if usedDetail}<p class="note small">{usedDetail}</p>{/if}
     {/if}
 
     <h4 class="section-title">Pasto</h4>

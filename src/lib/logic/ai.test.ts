@@ -21,6 +21,7 @@ import {
   GRACE_MS,
   OVERALL_MS,
   raceStep,
+  thinkingLevelFor,
   STAGGER_MS,
   parseAiMeal,
   scaleItem,
@@ -234,5 +235,20 @@ describe('AI: più modelli a scaglioni', () => {
     expect(raceStep({ ...base, results: ['fail', 'empty', 'fail'] })).toEqual({ type: 'finish' });
     expect(raceStep({ ...base, results: [null, null, null], elapsed: OVERALL_MS })).toEqual({ type: 'finish' });
     expect(raceStep({ ...base, total: 1, results: [null], sinceLastStart: 30000, elapsed: 30000 })).toEqual({ type: 'wait' });
+  });
+});
+
+describe('AI: quanto ragionamento chiedere', () => {
+  it('minimo dove è accettato (più veloce), basso sui Flash più nuovi', () => {
+    expect(thinkingLevelFor('gemini-3.5-flash-lite')).toBe('minimal');
+    expect(thinkingLevelFor('gemini-3.6-flash')).toBe('minimal');
+    expect(thinkingLevelFor('gemini-3.8-flash')).toBe('low');
+    expect(thinkingLevelFor('gemini-4-flash')).toBe('low');
+  });
+
+  it('i secondi nella riga dei tentativi', () => {
+    expect(describeAttempts([{ model: 'gemini-3.8-flash', outcome: 'slower' }, { model: 'gemini-3.5-flash-lite', outcome: 'ok', seconds: 12 }])).toBe(
+      '3.8 Flash: più lento di un altro · 3.5 Flash-Lite: ok (12 s)',
+    );
   });
 });

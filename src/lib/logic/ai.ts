@@ -318,6 +318,16 @@ export type AttemptOutcome = 'ok' | 'empty' | 'unreadable' | 'quota' | 'model' |
 export interface AiAttempt {
   model: string;
   outcome: AttemptOutcome;
+  /** Secondi dalla partenza dell'analisi alla risposta (per capire chi è lento). */
+  seconds?: number;
+}
+
+/**
+ * Quanto ragionamento chiedere. Il ragionamento minimo è il più veloce ed è già quello normale del
+ * Flash-Lite; il 3.6 Flash lo accetta, il 3.7 e il 3.8 Flash no (rispondono con un errore): a loro "low".
+ */
+export function thinkingLevelFor(model: string): 'minimal' | 'low' {
+  return /flash-lite|gemini-3\.[56]-flash/.test(model) ? 'minimal' : 'low';
 }
 
 /** "gemini-3.5-flash-lite" → "3.5 Flash-Lite". */
@@ -354,6 +364,8 @@ export const STAGGER_MS = 8_000;
 export const GRACE_MS = 6_000;
 /** Tempo massimo per tutta l'analisi. */
 export const OVERALL_MS = 75_000;
+/** Se nessuno ha risposto in tempo e restano almeno questi millisecondi, si riprova una volta il più veloce. */
+export const RETRY_MIN_LEFT_MS = 20_000;
 
 /** Come è finita la richiesta a un modello: null = ancora in corso. */
 export type RaceKind = 'ok' | 'empty' | 'fail' | 'stop';
@@ -397,7 +409,7 @@ export const SLOW_FOR_MS = 24 * 60 * 60 * 1000;
 
 /** Riga breve con i tentativi fatti, es. "3.8 Flash: limite gratuito raggiunto · 3.6 Flash: nessun cibo riconosciuto". */
 export function describeAttempts(attempts: AiAttempt[]): string {
-  return attempts.map((a) => `${modelLabel(a.model)}: ${OUTCOME_TEXT[a.outcome]}`).join(' · ');
+  return attempts.map((a) => `${modelLabel(a.model)}: ${OUTCOME_TEXT[a.outcome]}${a.seconds !== undefined ? ` (${a.seconds} s)` : ''}`).join(' · ');
 }
 
 /**

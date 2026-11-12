@@ -15,7 +15,9 @@ import {
   pauseUntil,
   problemMessage,
   raceStep,
+  RETRY_MIN_LEFT_MS,
   SLOW_FOR_MS,
+  thinkingLevelFor,
   type AiAttempt,
   type AiMeal,
   type AttemptOutcome,
@@ -133,12 +135,12 @@ function safeJson(text: string): unknown {
  */
 type Mode = 'full' | 'light' | 'bare';
 
-function body(prompt: string, image: { base64: string; mime: string } | null, mode: Mode): unknown {
+function body(prompt: string, image: { base64: string; mime: string } | null, mode: Mode, model: string): unknown {
   const parts: unknown[] = [];
   if (image) parts.push({ inline_data: { mime_type: image.mime, data: image.base64 } });
   parts.push({ text: prompt });
   const generationConfig: Record<string, unknown> = { responseMimeType: 'application/json' };
-  if (mode !== 'bare') generationConfig.thinkingConfig = { thinkingLevel: 'low' };
+  if (mode !== 'bare') generationConfig.thinkingConfig = { thinkingLevel: thinkingLevelFor(model) };
   if (mode === 'full') generationConfig.responseJsonSchema = MEAL_SCHEMA;
   return { contents: [{ role: 'user', parts }], generationConfig };
 }
@@ -215,9 +217,9 @@ export async function analyzeMeal(
     const limit = () => Math.max(1000, Math.min(mode === 'full' ? FULL_TIMEOUT_MS : TIMEOUT_MS, deadline - Date.now()));
     let res: HttpResult;
     try {
-      res = await request('POST', url, key, body(prompt, image, mode), limit(), signal);
+      res = await request('POST', url, key, body(prompt, image, mode, model), limit(), signal);
       if (res.status === 400 && geminiProblem(res.status, res.data) === 'other') {
-        res = await request('POST', url, key, body(prompt, image, 'bare'), limit(), signal);
+        res = await request('POST', url, key, body(prompt, image, 'bare', model), limit(), signal);
       }
     } catch (e) {
       if (!(e instanceof NetProblem)) throw e;
@@ -252,17 +254,21 @@ export async function analyzeMeal(
   }
 
   // Gara a scaglioni (regole in `raceStep`): si parte dal migliore e, se tarda, si avvia anche il successivo.
-  const runs: { model: string; ctrl: AbortController; result: ModelResult | null; startedAt: number }[] = [];
+  const runs: { model: string; ctrl: AbortController; result: ModelResult | null; startedAt: number; doneAt: number }[] = [];
+  // I modelli da avviare nell'ordine; in fondo si può aggiungere un secondo tentativo del più veloce.
+  const queue = [...models];
+  let retried = false;
   let firstOkAt: number | null = null;
   let wake: () => void = () => undefined;
   const start = () => {
-    const model = models[runs.length]!;
-    const run = { model, ctrl: new AbortController(), result: null as ModelResult | null, startedAt: Date.now() };
+    const model = queue[runs.length]!;
+    const run = { model, ctrl: new AbortController(), result: null as ModelResult | null, startedAt: Date.now(), doneAt: 0 };
     runs.push(run);
     void runModel(model, run.ctrl.signal)
       .catch((e: unknown): ModelResult => ({ kind: 'stop', outcome: 'error', problem: e instanceof UserError ? 'network' : 'other' }))
       .then((r) => {
         run.result = r;
+        run.doneAt = Date.now();
         if (r.kind === 'ok' && firstOkAt === null) firstOkAt = Date.now();
         wake();
       });
@@ -274,7 +280,7 @@ export async function analyzeMeal(
     const last = runs[runs.length - 1];
     const step = raceStep({
       results: runs.map((r): RaceKind | null => r.result?.kind ?? null),
-      total: models.length,
+      total: queue.length,
       lastIsSlow: last !== undefined && last.model in slow,
       sinceLastStart: last ? now - last.startedAt : 0,
       sinceFirstOk: firstOkAt === null ? null : now - firstOkAt,
@@ -289,6 +295,13 @@ export async function analyzeMeal(
         wake = resolve;
         setTimeout(resolve, 500);
       });
+      continue;
+    }
+    // Nessuno ha risposto in tempo ma c'è ancora tempo: si riprova una volta il più veloce
+    // (una risposta lenta spesso è un intoppo momentaneo, la seconda volta va).
+    if (step.type === 'finish' && !retried && queue.length && now - t0 <= OVERALL_MS - RETRY_MIN_LEFT_MS && runs.some((r) => r.result?.outcome === 'timeout')) {
+      retried = true;
+      queue.push(queue[queue.length - 1]!);
       continue;
     }
     outcome = step;
@@ -313,7 +326,11 @@ export async function analyzeMeal(
     if (changed) saveSlowModels(slow);
   }
 
-  const attempts: AiAttempt[] = runs.map((r) => ({ model: r.model, outcome: r.result?.outcome ?? (outcome.type === 'use' ? 'slower' : 'timeout') }));
+  const attempts: AiAttempt[] = runs.map((r) => ({
+    model: r.model,
+    outcome: r.result?.outcome ?? (outcome.type === 'use' ? 'slower' : 'timeout'),
+    ...(r.result ? { seconds: Math.round((r.doneAt - t0) / 1000) } : {}),
+  }));
   const detail = describeAttempts(attempts);
   if (outcome.type === 'use') {
     const r = runs[outcome.index]!.result as { meal: AiMeal };

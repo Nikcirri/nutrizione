@@ -9,6 +9,8 @@
   Per questo la richiesta completa (`full`) ha al massimo 30 s e dopo un blocco per 24 ore si chiede in modo `light` (`kv` `aiLightUntil`).
   Con la foto i Flash a volte non rispondono per oltre 45 s mentre il Flash-Lite risponde in ~10 s: i modelli NON si aspettano uno dopo l'altro (erano 2 minuti).
   Gara a scaglioni (`raceStep` in `logic/ai.ts`, con test): parte il migliore, ogni `STAGGER_MS` (8 s) senza risposta si avvia anche il successivo, vince la prima risposta buona ma i migliori ancora in corsa hanno `GRACE_MS` (6 s) di vantaggio; tutto entro `OVERALL_MS` (75 s).
+  Se nessuno risponde in tempo e restano almeno 20 s (`RETRY_MIN_LEFT_MS`) si riprova una volta il più veloce. Ragionamento: `thinkingLevelFor` = 'minimal' (il più veloce) per 3.5 Flash-Lite e 3.6 Flash, 'low' per 3.7/3.8 Flash che rifiutano 'minimal'.
+  Sotto il risultato e sotto gli errori c'è la riga dei tentativi con i secondi di ogni modello: chiedila all'utente se la Foto AI è lenta.
   Con la foto, chi non risponde viene segnato lento per 24 ore (`kv` `aiSlowWithPhoto`) e parte insieme al successivo senza vantaggio. Le richieste superate si interrompono. Solo senza rete o con chiave sbagliata ci si ferma subito.
   La richiesta va prima con il fetch della WebView (Gemini accetta chiamate dal browser), di riserva con CapacitorHttp; la foto è ridotta a 768 px (Gemini lavora a riquadri di 768).
   Dopo la foto la stima NON parte da sola (l'utente vuole il tempo di scrivere la descrizione); la descrizione ha la precedenza sulla foto. La chiave sta in `kv` con nome `geminiKey`, fuori dalle impostazioni: non deve mai finire nei backup.
