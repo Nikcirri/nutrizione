@@ -452,7 +452,7 @@ async function estimateMeal(
         problem === 'quota' ? (isPaidOnly(res.data) ? 'paid' : 'quota') : problem === 'model' ? 'model' : 'error';
       // Chiave sbagliata, zona non servita, contenuto bloccato: inutile provare altri modelli.
       const stop = problem === 'key' || problem === 'region' || problem === 'blocked';
-      if (outcome === 'error') notes.push(String(res.status));
+      if (outcome === 'error' && !notes.some((n) => n.includes(String(res.status)))) notes.push(String(res.status));
       return { kind: stop ? 'stop' : 'fail', outcome, problem, note: notes.join(', ') || undefined };
     }
     if (pauses[model]) {

@@ -534,6 +534,12 @@ export const STAGGER_MS = 14_000;
 /** Con una risposta buona di un modello più leggero, quanto si aspetta ancora quelli migliori (stimano meglio). */
 export const GRACE_MS = 10_000;
 /**
+ * Oltre questo tempo dalla partenza non si concede più vantaggio: un modello migliore ancora zitto dopo
+ * 35 s di solito è bloccato (server di Google sovraccarichi). Il 18/11 una stima di sola descrizione aveva
+ * la risposta del Flash-Lite a 33 s ma aspettava Hydrogen fino a 43 s, inutilmente.
+ */
+export const GRACE_END_MS = 35_000;
+/**
  * Un modello è "lento con le foto" solo se è rimasto senza rispondere almeno questo tempo. Prima bastava
  * essere superati da un altro: in pochi giri tutti i modelli diventavano "lenti" e partivano insieme a ogni
  * foto, consumando il limite gratuito tre volte più in fretta.
@@ -575,7 +581,9 @@ export function raceStep(s: RaceState): RaceAction {
   const ok = s.results.indexOf('ok');
   if (ok >= 0) {
     const betterPending = s.results.slice(0, ok).some((r) => r === null);
-    if (!betterPending || (s.sinceFirstOk ?? 0) >= GRACE_MS || s.elapsed >= OVERALL_MS) return { type: 'use', index: ok };
+    if (!betterPending || (s.sinceFirstOk ?? 0) >= GRACE_MS || s.elapsed >= GRACE_END_MS || s.elapsed >= OVERALL_MS) {
+      return { type: 'use', index: ok };
+    }
     return { type: 'wait' };
   }
   const pending = s.results.filter((r) => r === null).length;

@@ -1,5 +1,9 @@
 # Novità
 
+## [0.9.9] - 2026-11-18
+- Foto AI: non aspetta più di 35 secondi un modello bloccato se un altro ha già risposto.
+- Riga dei tentativi più pulita quando Google è sovraccarico (errore 503).
+
 ## [0.9.8] - 2026-11-18
 - Foto AI più veloce quando un modello rifiuta il formato della richiesta.
 - Anche con la sola descrizione l'app impara quali modelli sono lenti.

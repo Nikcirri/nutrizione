@@ -22,6 +22,7 @@ import {
   describeAttempts,
   finishNote,
   isTimeoutError,
+  GRACE_END_MS,
   GRACE_MS,
   OVERALL_MS,
   raceStep,
@@ -257,6 +258,10 @@ describe('AI: più modelli a scaglioni', () => {
     expect(raceStep({ ...base, results: ['ok', null] })).toEqual({ type: 'use', index: 0 });
     expect(raceStep({ ...base, results: [null, null, 'ok'], sinceFirstOk: 1000, elapsed: 20000 })).toEqual({ type: 'wait' });
     expect(raceStep({ ...base, results: [null, null, 'ok'], sinceFirstOk: GRACE_MS, elapsed: 25000 })).toEqual({ type: 'use', index: 2 });
+    // Il migliore è zitto da 35 s: è bloccato, si usa subito la risposta arrivata (non si aspetta fino a 43 s).
+    expect(raceStep({ ...base, results: [null, 'fail', 'ok'], sinceFirstOk: 0, elapsed: 33000 })).toEqual({ type: 'wait' });
+    expect(raceStep({ ...base, results: [null, 'fail', 'ok'], sinceFirstOk: 2000, elapsed: GRACE_END_MS })).toEqual({ type: 'use', index: 2 });
+    expect(raceStep({ ...base, results: [null, 'ok'], sinceFirstOk: 0, elapsed: 40000 })).toEqual({ type: 'use', index: 1 });
     expect(raceStep({ ...base, results: ['fail', 'ok', null], sinceFirstOk: 0 })).toEqual({ type: 'use', index: 1 });
   });
 
