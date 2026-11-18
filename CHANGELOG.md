@@ -1,5 +1,10 @@
 # Novità
 
+## [0.9.7] - 2026-11-18
+- Foto AI: usa Gemini 4 Hydrogen, il nuovo modello gratuito di Google.
+- I modelli nuovi arrivano da soli anche quando Google cambia il modo di chiamarli.
+- Nel Profilo vedi anche quali modelli non sono gratuiti con la tua chiave.
+
 ## [0.9.6] - 2026-11-12
 - Foto AI: quando Google pubblica un modello Gemini nuovo, l'app lo usa da sola (senza aggiornamenti).
 - Nel Profilo vedi quali modelli usa e se arrivano dall'elenco di Google.

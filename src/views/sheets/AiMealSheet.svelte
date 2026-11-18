@@ -21,7 +21,7 @@
   import { mealShare } from '../../lib/logic/goals';
   import { tapFeedback } from '../../lib/platform';
   import { addEntry, addHabit, findDish, getAiKey, getHabits, saveDish, topDishes } from '../../lib/repo';
-  import { AiError, analyzeMeal } from '../../lib/services/gemini';
+  import { AiError, analyzeMeal, modelsFor } from '../../lib/services/gemini';
   import { chooseMealPhoto, prepareImage, takeMealPhoto, type PreparedImage } from '../../lib/services/photo';
   import { app, currentTargets, sheets } from '../../lib/state/app.svelte';
   import { showToast, showUndoToast } from '../../lib/state/ui.svelte';
@@ -74,6 +74,8 @@
         const [k, d] = await Promise.all([getAiKey(db), topDishes(db, 8)]);
         key = k;
         dishes = d;
+        // Mentre si scatta la foto si prepara l'elenco dei modelli (una volta al giorno), così la stima parte subito.
+        if (k) void modelsFor(k).catch(() => undefined);
       } catch (e) {
         key = key ?? '';
         reportError(e);

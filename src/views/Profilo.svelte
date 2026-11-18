@@ -27,7 +27,7 @@
   import { appName } from '../lib/logic/healthSources';
   import { useLive } from '../lib/state/live.svelte';
   import AiKeyForm from '../lib/ui/AiKeyForm.svelte';
-  import { modelsFor, type ModelInfo } from '../lib/services/gemini';
+  import { modelsInUse } from '../lib/services/gemini';
   import { modelLabel } from '../lib/logic/ai';
   import { checkUpdateNow, installUpdate } from '../lib/state/update.svelte';
   import { app, currentTargets, initApp, sheets, updateSettings, weightForCalc } from '../lib/state/app.svelte';
@@ -57,14 +57,14 @@
   let aiKey = $state<string | null>(null);
   let changingKey = $state(false);
   /** Modelli di Gemini in uso e se arrivano dall'elenco di Google (così i nuovi arrivano da soli). */
-  let modelInfo = $state<ModelInfo | null>(null);
+  let modelInfo = $state<{ models: string[]; paid: string[]; fromList: boolean } | null>(null);
 
   onMount(() => {
     getAiKey(db)
       .then((k) => {
         aiKey = k;
         if (k) {
-          modelsFor(k)
+          modelsInUse(k)
             .then((i) => (modelInfo = i))
             .catch(() => (modelInfo = null));
         }
@@ -436,6 +436,9 @@
         ? 'Presi dall’elenco di Google, controllato ogni giorno: quando esce un modello nuovo l’app lo usa da sola.'
         : 'Google non ha dato il suo elenco: l’app usa quelli scritti al suo interno e i nomi “sempre aggiornati” di Google.'}
     </p>
+    {#if modelInfo.paid.length}
+      <p class="note">Non gratuiti con la tua chiave, quindi non usati: {modelInfo.paid.map(modelLabel).join(', ')}.</p>
+    {/if}
   {/if}
 {:else if aiKey !== null}
   <div class="card">

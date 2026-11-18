@@ -10,11 +10,14 @@ import {
   geminiProblem,
   geminiText,
   isTimeoutError,
+  chooseModels,
+  isLiteId,
+  isPaidOnly,
   LATEST_ALIASES,
   MEAL_SCHEMA,
-  modelsToTry,
+  PAID_RECHECK_MS,
   parseAiMeal,
-  pickModels,
+  rankModels,
   OVERALL_MS,
   pauseUntil,
   problemMessage,
@@ -30,6 +33,7 @@ import {
   type AttemptOutcome,
   type GeminiProblem,
   type ListedModel,
+  type ModelCandidate,
   type ModelPauses,
   type PromptContext,
   type RaceKind,
@@ -50,28 +54,99 @@ const MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite']
 /** Modelli scelti dall'elenco di Google, riletto una volta al giorno. */
 const MODELS_KEY = 'aiModels';
 const MODELS_REFRESH_MS = 24 * 60 * 60 * 1000;
+/** Cambia quando cambia il modo di scegliere: le scelte salvate prima si rifanno. */
+const MODELS_FORMAT = 2;
+/** Quanti modelli tenere di riserva (oltre a quelli della gara) per quando i primi finiscono il limite. */
+const KEEP_MAIN = 4;
+const KEEP_LITE = 2;
 
-export interface ModelInfo {
-  /** Dal migliore al più leggero. */
-  models: string[];
-  /** Vero se arrivano dall'elenco di Google; falso se è l'elenco scritto nell'app. */
-  fromList: boolean;
+/** Esito della prova di un modello con la chiave dell'utente: gratuito o no. */
+interface FreeCheck {
+  free: boolean;
   at: number;
 }
 
+export interface ModelInfo {
+  /** Dal migliore al più leggero, senza quelli non gratuiti. */
+  models: string[];
+  /** Quali sono della famiglia leggera (Flash-Lite). */
+  lite: string[];
+  /** Non gratuiti con questa chiave (non usati). */
+  paid: string[];
+  /** Vero se arrivano dall'elenco di Google; falso se è l'elenco scritto nell'app. */
+  fromList: boolean;
+  at: number;
+  checks: Record<string, FreeCheck>;
+  format: number;
+}
+
+const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every((m) => typeof m === 'string');
+
 async function savedModelInfo(): Promise<ModelInfo | null> {
   const v = (await db.kv.get(MODELS_KEY).catch(() => undefined))?.value as Partial<ModelInfo> | undefined;
-  if (!v || !Array.isArray(v.models) || !v.models.every((m) => typeof m === 'string') || !v.models.length || typeof v.at !== 'number') return null;
-  return { models: v.models, fromList: v.fromList === true, at: v.at };
+  if (!v || v.format !== MODELS_FORMAT || !isStrings(v.models) || !v.models.length || !isStrings(v.lite) || !isStrings(v.paid)) return null;
+  if (typeof v.at !== 'number' || typeof v.checks !== 'object' || v.checks === null) return null;
+  return { models: v.models, lite: v.lite, paid: v.paid, fromList: v.fromList === true, at: v.at, checks: v.checks, format: MODELS_FORMAT };
 }
 
 /**
+ * Prova minuscola per sapere se un modello è gratuito con questa chiave: vero se risponde, falso se Google
+ * dice che non è nel livello gratuito (limite 0, non consuma niente), null se non si capisce (limite del
+ * giorno finito, rete, errore): in quel caso lo si tiene e lo si riprova un'altra volta.
+ */
+async function isFreeModel(key: string, model: string): Promise<boolean | null> {
+  try {
+    const res = await request(
+      'POST',
+      `${BASE}/models/${model}:generateContent`,
+      key,
+      { contents: [{ role: 'user', parts: [{ text: 'Rispondi solo: ok' }] }], generationConfig: { maxOutputTokens: 32 } },
+      15_000,
+    );
+    if (res.status >= 200 && res.status < 300) return true;
+    if (res.status === 429 && isPaidOnly(res.data)) return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Prova i modelli nuovi dal migliore, solo finché ne servono (2 normali e 1 leggero gratuiti): costa al
+ * massimo una richiesta per ogni modello nuovo, una volta sola. Quelli non gratuiti si riprovano dopo un mese.
+ */
+async function checkNewModels(key: string, candidates: readonly ModelCandidate[], checks: Record<string, FreeCheck>): Promise<void> {
+  const now = Date.now();
+  for (const [lite, want] of [[false, 2], [true, 1]] as const) {
+    let usable = 0;
+    for (const c of candidates.filter((m) => m.lite === lite)) {
+      if (usable >= want) break;
+      const known = checks[c.id];
+      if (!known || (!known.free && now - known.at >= PAID_RECHECK_MS)) {
+        const free = await isFreeModel(key, c.id);
+        if (free !== null) checks[c.id] = { free, at: now };
+      }
+      if (checks[c.id]?.free !== false) usable++;
+    }
+  }
+}
+
+let loading: Promise<ModelInfo> | null = null;
+
+/**
  * I modelli da usare. Una volta al giorno (o subito se un modello è sparito) si chiede a Google l'elenco
- * dei modelli: funziona anche con la chiave gratuita e non consuma il limite delle stime.
+ * dei modelli: funziona anche con la chiave gratuita e non consuma il limite delle stime. Si scelgono per
+ * numero di versione, non per nome, così arrivano da soli anche i modelli con nomi nuovi ("4 Hydrogen");
+ * i nuovi si provano una volta per sapere se sono gratuiti.
  * Se l'elenco non arriva si tiene quello dell'ultima volta, altrimenti quelli scritti nell'app più i nomi
  * "sempre aggiornati" di Google.
  */
-export async function modelsFor(key: string, force = false): Promise<ModelInfo> {
+export function modelsFor(key: string, force = false): Promise<ModelInfo> {
+  loading ??= loadModels(key, force).finally(() => (loading = null));
+  return loading;
+}
+
+async function loadModels(key: string, force: boolean): Promise<ModelInfo> {
   const saved = await savedModelInfo();
   if (saved && !force && Date.now() - saved.at < MODELS_REFRESH_MS) return saved;
   let listed: ListedModel[] | null = null;
@@ -83,11 +158,40 @@ export async function modelsFor(key: string, force = false): Promise<ModelInfo> 
     listed = null;
   }
   if (!listed && saved) return saved;
-  // Elenco arrivato e con almeno un Flash riconosciuto: si usa quello; altrimenti la riserva.
-  const fromList = listed !== null && pickModels(listed, []).length > 0;
-  const info: ModelInfo = { models: fromList ? pickModels(listed, MODELS) : [...MODELS, ...LATEST_ALIASES], fromList, at: Date.now() };
+  const ranked = listed ? rankModels(listed) : [];
+  const checks: Record<string, FreeCheck> = {};
+  for (const c of ranked) if (saved?.checks[c.id]) checks[c.id] = saved.checks[c.id]!;
+  if (ranked.length) await checkNewModels(key, ranked, checks);
+  const paid = ranked.filter((c) => checks[c.id]?.free === false).map((c) => c.id);
+  const usable = ranked.filter((c) => !paid.includes(c.id));
+  const fromList = usable.length > 0;
+  const chosen: ModelCandidate[] = fromList
+    ? [...usable.filter((c) => !c.lite).slice(0, KEEP_MAIN), ...usable.filter((c) => c.lite).slice(0, KEEP_LITE)]
+    : [...MODELS, ...LATEST_ALIASES].map((id) => ({ id, lite: isLiteId(id) }));
+  const info: ModelInfo = {
+    models: chosen.map((c) => c.id),
+    lite: chosen.filter((c) => c.lite).map((c) => c.id),
+    paid,
+    fromList,
+    at: Date.now(),
+    checks,
+    format: MODELS_FORMAT,
+  };
   await db.kv.put({ key: MODELS_KEY, value: info }).catch(() => undefined);
   return info;
+}
+
+/** I modelli che userebbe adesso una stima (senza quelli in pausa) e quelli non gratuiti: per il Profilo. */
+export async function modelsInUse(key: string): Promise<{ models: string[]; paid: string[]; fromList: boolean }> {
+  const info = await modelsFor(key);
+  const pauses: ModelPauses = await getModelPauses(db).catch(() => ({}));
+  return { models: chooseModels(info.models, info.lite, pauses, Date.now()), paid: info.paid, fromList: info.fromList };
+}
+
+/** Un modello è sparito: alla prossima stima si rilegge l'elenco (tenendo le prove già fatte). */
+async function expireModels(): Promise<void> {
+  const saved = await savedModelInfo();
+  if (saved) await db.kv.put({ key: MODELS_KEY, value: { ...saved, at: 0 } }).catch(() => undefined);
 }
 /** Tempo massimo per la richiesta "completa" (vedi `body`): se Gemini si blocca non si aspetta oltre. */
 const FULL_TIMEOUT_MS = 30_000;
@@ -292,7 +396,8 @@ async function estimateMeal(
 ): Promise<AiAnalysis> {
   const prompt = buildPrompt(description, image !== null, context);
   const pauses: ModelPauses = await getModelPauses(db).catch(() => ({}));
-  const models = modelsToTry((await modelsFor(key)).models, pauses, Date.now());
+  const info = await modelsFor(key);
+  const models = chooseModels(info.models, info.lite, pauses, Date.now());
   const slow = image ? await getSlowModels() : {};
   const mode: Mode = (await lightPreferred()) ? 'light' : 'full';
   const savePauses = () => void setModelPauses(db, pauses).catch(() => undefined);
@@ -329,7 +434,8 @@ async function estimateMeal(
         pauses[model] = until;
         savePauses();
       }
-      const outcome: AttemptOutcome = problem === 'quota' ? 'quota' : problem === 'model' ? 'model' : 'error';
+      const outcome: AttemptOutcome =
+        problem === 'quota' ? (isPaidOnly(res.data) ? 'paid' : 'quota') : problem === 'model' ? 'model' : 'error';
       // Chiave sbagliata, zona non servita, contenuto bloccato: inutile provare altri modelli.
       const stop = problem === 'key' || problem === 'region' || problem === 'blocked';
       return { kind: stop ? 'stop' : 'fail', outcome, problem };
@@ -404,7 +510,7 @@ async function estimateMeal(
   // Le richieste ancora in corso non servono più.
   for (const r of runs) if (!r.result) r.ctrl.abort();
   // Un modello è sparito (Google l'ha spento): la prossima volta si rilegge subito l'elenco.
-  if (runs.some((r) => r.result?.outcome === 'model')) void db.kv.delete(MODELS_KEY).catch(() => undefined);
+  if (runs.some((r) => r.result?.outcome === 'model')) void expireModels().catch(() => undefined);
 
   // Con una foto: chi non ha risposto (o è stato superato) parte senza vantaggio per un giorno; chi ha risposto bene lo riprende.
   if (image) {
