@@ -479,8 +479,10 @@ export type AttemptOutcome = 'ok' | 'empty' | 'unreadable' | 'quota' | 'paid' | 
 export interface AiAttempt {
   model: string;
   outcome: AttemptOutcome;
-  /** Secondi dalla partenza dell'analisi alla risposta (per capire chi è lento). */
+  /** Secondi dalla partenza dell'analisi alla risposta (o a quando è stato fermato). */
   seconds?: number;
+  /** Dettaglio breve: codice d'errore, risposta troncata, formato più semplice… */
+  note?: string;
 }
 
 /**
@@ -590,7 +592,26 @@ export const SLOW_FOR_MS = 24 * 60 * 60 * 1000;
 
 /** Riga breve con i tentativi fatti, es. "3.8 Flash: limite gratuito raggiunto · 3.6 Flash: nessun cibo riconosciuto". */
 export function describeAttempts(attempts: AiAttempt[]): string {
-  return attempts.map((a) => `${modelLabel(a.model)}: ${OUTCOME_TEXT[a.outcome]}${a.seconds !== undefined ? ` (${a.seconds} s)` : ''}`).join(' · ');
+  return attempts
+    .map((a) => {
+      const extra = [a.note, a.seconds !== undefined ? `${a.seconds} s` : undefined].filter(Boolean).join(', ');
+      return `${modelLabel(a.model)}: ${OUTCOME_TEXT[a.outcome]}${extra ? ` (${extra})` : ''}`;
+    })
+    .join(' · ');
+}
+
+/**
+ * Perché una risposta arrivata non ha il piatto (da `finishReason` di Gemini): troncata, bloccata, vuota.
+ * Undefined se è finita normalmente.
+ */
+export function finishNote(json: unknown): string | undefined {
+  const c = (json as { candidates?: { finishReason?: unknown }[] } | null)?.candidates?.[0];
+  if (!c) return 'vuota';
+  const reason = typeof c.finishReason === 'string' ? c.finishReason : '';
+  if (!reason || reason === 'STOP') return undefined;
+  if (reason === 'MAX_TOKENS') return 'troncata';
+  if (/SAFETY|PROHIBITED|BLOCKLIST|SPII|RECITATION/.test(reason)) return 'bloccata';
+  return reason.toLowerCase();
 }
 
 /**

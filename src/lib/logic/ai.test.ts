@@ -20,6 +20,7 @@ import {
   msToPacificMidnight,
   pauseUntil,
   describeAttempts,
+  finishNote,
   isTimeoutError,
   GRACE_MS,
   OVERALL_MS,
@@ -277,6 +278,26 @@ describe('AI: quanto ragionamento chiedere', () => {
     expect(thinkingLevelFor('gemini-4-hydrogen')).toBe('low');
     expect(thinkingLevelFor('gemini-4-neon-lite')).toBe('low');
     expect(thinkingLevelFor('gemini-flash-lite-latest')).toBe('low');
+  });
+
+  it('nella riga dei tentativi il dettaglio breve di ogni modello', () => {
+    expect(
+      describeAttempts([
+        { model: 'gemini-4-hydrogen', outcome: 'slower', seconds: 43, note: 'senza schema' },
+        { model: 'gemini-3.8-flash', outcome: 'ok', seconds: 33 },
+        { model: 'gemini-3.5-flash-lite', outcome: 'unreadable', seconds: 30, note: 'troncata' },
+        { model: 'gemini-4-argon', outcome: 'error', note: '400' },
+      ]),
+    ).toBe('4 Hydrogen: più lento di un altro (senza schema, 43 s) · 3.8 Flash: ok (33 s) · 3.5 Flash-Lite: risposta non leggibile (troncata, 30 s) · 4 Argon: errore (400)');
+  });
+
+  it('dice perché una risposta non ha il piatto', () => {
+    expect(finishNote({ candidates: [{ finishReason: 'STOP' }] })).toBeUndefined();
+    expect(finishNote({ candidates: [{ finishReason: 'MAX_TOKENS' }] })).toBe('troncata');
+    expect(finishNote({ candidates: [{ finishReason: 'SAFETY' }] })).toBe('bloccata');
+    expect(finishNote({ candidates: [{ finishReason: 'MALFORMED_FUNCTION_CALL' }] })).toBe('malformed_function_call');
+    expect(finishNote({ candidates: [] })).toBe('vuota');
+    expect(finishNote({ candidates: [{}] })).toBeUndefined();
   });
 
   it('i secondi nella riga dei tentativi', () => {

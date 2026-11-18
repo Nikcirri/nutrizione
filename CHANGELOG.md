@@ -1,5 +1,10 @@
 # Novità
 
+## [0.9.8] - 2026-11-18
+- Foto AI più veloce quando un modello rifiuta il formato della richiesta.
+- Anche con la sola descrizione l'app impara quali modelli sono lenti.
+- La riga dei tentativi dice di più: errori, risposte troncate, secondi di attesa.
+
 ## [0.9.7] - 2026-11-18
 - Foto AI: usa Gemini 4 Hydrogen, il nuovo modello gratuito di Google.
 - I modelli nuovi arrivano da soli anche quando Google cambia il modo di chiamarli.

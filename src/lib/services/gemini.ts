@@ -6,6 +6,7 @@ import {
   buildPrompt,
   describeAttempts,
   estimateKey,
+  finishNote,
   findCached,
   geminiProblem,
   geminiText,
@@ -200,8 +201,9 @@ const TIMEOUT_MS = 45_000;
 /** Dopo un blocco della richiesta completa, per un giorno si usa subito quella leggera. */
 const LIGHT_KEY = 'aiLightUntil';
 const LIGHT_FOR_MS = 24 * 60 * 60 * 1000;
-/** Modelli lenti con le foto (vedi `SlowModels`). */
+/** Modelli lenti (vedi `SlowModels`): con le foto e con la sola descrizione si tengono separati. */
 const SLOW_KEY = 'aiSlowWithPhoto';
+const SLOW_TEXT_KEY = 'aiSlowText';
 /** Ultime stime fatte (vedi `CachedEstimate`). */
 const CACHE_KEY = 'aiEstimates';
 /**
@@ -317,8 +319,8 @@ function preferLight(): void {
   void db.kv.put({ key: LIGHT_KEY, value: Date.now() + LIGHT_FOR_MS }).catch(() => undefined);
 }
 
-async function getSlowModels(): Promise<SlowModels> {
-  const row = await db.kv.get(SLOW_KEY).catch(() => undefined);
+async function getSlowModels(key: string): Promise<SlowModels> {
+  const row = await db.kv.get(key).catch(() => undefined);
   const v = row?.value;
   const out: SlowModels = {};
   if (typeof v === 'object' && v !== null) {
@@ -327,14 +329,15 @@ async function getSlowModels(): Promise<SlowModels> {
   return out;
 }
 
-function saveSlowModels(slow: SlowModels): void {
-  void db.kv.put({ key: SLOW_KEY, value: slow }).catch(() => undefined);
+function saveSlowModels(key: string, slow: SlowModels): void {
+  void db.kv.put({ key, value: slow }).catch(() => undefined);
 }
 
 /** Come è finita la richiesta a un modello. */
-type ModelResult =
+type ModelResult = (
   | { kind: 'ok' | 'empty'; meal: AiMeal; outcome: AttemptOutcome }
-  | { kind: 'fail' | 'stop'; outcome: AttemptOutcome; problem: GeminiProblem; unreadable?: boolean };
+  | { kind: 'fail' | 'stop'; outcome: AttemptOutcome; problem: GeminiProblem; unreadable?: boolean }
+) & { note?: string };
 
 /** Errore della Foto AI con, in più, una riga tecnica breve su cosa è successo con ogni modello. */
 export class AiError extends UserError {
@@ -398,7 +401,8 @@ async function estimateMeal(
   const pauses: ModelPauses = await getModelPauses(db).catch(() => ({}));
   const info = await modelsFor(key);
   const models = chooseModels(info.models, info.lite, pauses, Date.now());
-  const slow = image ? await getSlowModels() : {};
+  const slowKey = image ? SLOW_KEY : SLOW_TEXT_KEY;
+  const slow = await getSlowModels(slowKey);
   const mode: Mode = (await lightPreferred()) ? 'light' : 'full';
   const savePauses = () => void setModelPauses(db, pauses).catch(() => undefined);
   const t0 = Date.now();
@@ -409,23 +413,33 @@ async function estimateMeal(
     const url = `${BASE}/models/${model}:generateContent`;
     const limit = () => Math.max(1000, Math.min(mode === 'full' ? FULL_TIMEOUT_MS : TIMEOUT_MS, deadline - Date.now()));
     let res: HttpResult;
+    const notes: string[] = [];
     try {
-      res = await request('POST', url, key, body(prompt, image, mode, model), limit(), signal);
-      if (res.status === 400 && geminiProblem(res.status, res.data) === 'other') {
-        res = await request('POST', url, key, body(prompt, image, 'bare', model), limit(), signal);
+      let used: Mode = mode;
+      res = await request('POST', url, key, body(prompt, image, used, model), limit(), signal);
+      // Il modello non accetta qualche impostazione (errore 400): si toglie prima la forma imposta della
+      // risposta e solo dopo il ragionamento. Senza ragionamento indicato i modelli nuovi ragionano "alto",
+      // che è lentissimo: per questo non si salta subito al formato più semplice.
+      for (const simpler of mode === 'full' ? (['light', 'bare'] as const) : mode === 'light' ? (['bare'] as const) : []) {
+        if (!(res.status === 400 && geminiProblem(res.status, res.data) === 'other') || signal.aborted) break;
+        used = simpler;
+        res = await request('POST', url, key, body(prompt, image, used, model), limit(), signal);
       }
+      if (used !== mode) notes.push(used === 'bare' ? 'formato semplice' : 'senza schema');
       // Errore momentaneo dei server di Google (500, 503 "sovraccarico"): si riprova una volta lo stesso modello.
       if (res.status >= 500 && deadline - Date.now() > 10_000 && !signal.aborted) {
+        notes.push(`riprovato dopo errore ${res.status}`);
         await new Promise((r) => setTimeout(r, 1500));
-        res = await request('POST', url, key, body(prompt, image, mode, model), limit(), signal);
+        res = await request('POST', url, key, body(prompt, image, used, model), limit(), signal);
       }
     } catch (e) {
       if (!(e instanceof NetProblem)) throw e;
       // Il formato completo a volte fa bloccare Gemini: per un giorno si chiede in modo leggero.
       if (e.kind === 'timeout' && mode === 'full' && !signal.aborted) preferLight();
+      const note = notes.join(', ') || undefined;
       return e.kind === 'network'
-        ? { kind: 'stop', outcome: 'network', problem: 'network' }
-        : { kind: 'fail', outcome: 'timeout', problem: 'timeout' };
+        ? { kind: 'stop', outcome: 'network', problem: 'network', note }
+        : { kind: 'fail', outcome: 'timeout', problem: 'timeout', note };
     }
     if (res.status < 200 || res.status >= 300) {
       const problem = geminiProblem(res.status, res.data);
@@ -438,18 +452,22 @@ async function estimateMeal(
         problem === 'quota' ? (isPaidOnly(res.data) ? 'paid' : 'quota') : problem === 'model' ? 'model' : 'error';
       // Chiave sbagliata, zona non servita, contenuto bloccato: inutile provare altri modelli.
       const stop = problem === 'key' || problem === 'region' || problem === 'blocked';
-      return { kind: stop ? 'stop' : 'fail', outcome, problem };
+      if (outcome === 'error') notes.push(String(res.status));
+      return { kind: stop ? 'stop' : 'fail', outcome, problem, note: notes.join(', ') || undefined };
     }
     if (pauses[model]) {
       delete pauses[model];
       savePauses();
     }
+    const finish = finishNote(res.data);
+    if (finish) notes.push(finish);
+    const note = notes.join(', ') || undefined;
     const text = geminiText(res.data);
-    if (!text && geminiProblem(res.status, res.data) === 'blocked') return { kind: 'stop', outcome: 'error', problem: 'blocked' };
+    if (!text && geminiProblem(res.status, res.data) === 'blocked') return { kind: 'stop', outcome: 'error', problem: 'blocked', note };
     const meal = parseAiMeal(text);
-    if (!meal) return { kind: 'fail', outcome: 'unreadable', problem: 'other', unreadable: true };
-    if (!meal.items.length) return { kind: 'empty', meal, outcome: 'empty' };
-    return { kind: 'ok', meal, outcome: 'ok' };
+    if (!meal) return { kind: 'fail', outcome: 'unreadable', problem: 'other', unreadable: true, note };
+    if (!meal.items.length) return { kind: 'empty', meal, outcome: 'empty', note };
+    return { kind: 'ok', meal, outcome: 'ok', note };
   }
 
   // Gara a scaglioni (regole in `raceStep`): si parte dal migliore e, se tarda, si avvia anche il successivo.
@@ -512,8 +530,9 @@ async function estimateMeal(
   // Un modello è sparito (Google l'ha spento): la prossima volta si rilegge subito l'elenco.
   if (runs.some((r) => r.result?.outcome === 'model')) void expireModels().catch(() => undefined);
 
-  // Con una foto: chi non ha risposto (o è stato superato) parte senza vantaggio per un giorno; chi ha risposto bene lo riprende.
-  if (image) {
+  // Chi non ha risposto per almeno 20 s parte senza vantaggio per un giorno (foto e sola descrizione tenute
+  // separate); chi ha risposto bene lo riprende.
+  {
     let changed = false;
     for (const r of runs) {
       if (wasSlow(r.result?.outcome ?? null, (r.result ? r.doneAt : Date.now()) - r.startedAt)) {
@@ -524,13 +543,16 @@ async function estimateMeal(
         changed = true;
       }
     }
-    if (changed) saveSlowModels(slow);
+    if (changed) saveSlowModels(slowKey, slow);
   }
 
+  const stoppedAt = Date.now();
   const attempts: AiAttempt[] = runs.map((r) => ({
     model: r.model,
     outcome: r.result?.outcome ?? (outcome.type === 'use' ? 'slower' : 'timeout'),
-    ...(r.result ? { seconds: Math.round((r.doneAt - t0) / 1000) } : {}),
+    // Anche per chi è stato fermato: quanto lo si è aspettato.
+    seconds: Math.round(((r.result ? r.doneAt : stoppedAt) - t0) / 1000),
+    ...(r.result?.note ? { note: r.result.note } : {}),
   }));
   const detail = describeAttempts(attempts);
   if (outcome.type === 'use') {
